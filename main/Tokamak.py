@@ -10,7 +10,6 @@ Updated and re-written during the refactor - JLH
 """
 
 import os
-from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -65,6 +64,7 @@ class Tokamak(object):
         eqFileName  :: The name of the equilibrium file to be used
         loadBolometers    :: Set to True to load the bolometers (needed to make radDists)
         """
+
         self.verbose = verbose
         if tokamakName not in SUPPORTED_TOKAMAKS:
             print(f"Please eneter a valid tokamak name!")
@@ -316,6 +316,19 @@ class Tokamak(object):
             )
             self.bolometers.append(b_)
 
+    def _inside_tokamak(self, points) -> bool:
+        """
+        Checks to see if the np.column_stacked R, z points are within the tokamak wall
+        """
+        if self.wall is None:
+            raise RuntimeError(
+                "Tokamak wall is not initialized. Ensure that the wall attribute is set before calling inside_tokamak()."
+            )
+
+        wallcurve = self.wall["wallcurve"]
+
+        return wallcurve.contains_points(points)
+
     def _plot_first_wall(self, ax=None) -> None:
         """
         Plots the first wall from self.wall["wallcurve"].
@@ -558,14 +571,14 @@ class Tokamak(object):
         self.fieldLines[startPhideg]["startPhi"] = startPhi
 
         # --- Loop over the direction
-        direction_prefix = ["counterClock", "clockwise"]
+        direction_prefix_ = ["counterClock", "clockwise"]
         numTrans = [numTransists, (-1.0) * numTransists]
-        for ii, direction_prefix in enumerate(direction_prefix):
+        for ii, direction_prefix in enumerate(direction_prefix_):
             # --- Loop over the R, z coordinates, store the result
             for jj in range(len(startR)):
                 if self.verbose:
                     print(
-                        f"Calculating fields in the {direction_prefix[ii]} direction from\tR={startR[jj]:.2f}m, z={startZ[jj]:.2f}m"
+                        f"Calculating fields in the {direction_prefix} direction from\tR={startR[jj]:.2f}m, z={startZ[jj]:.2f}m"
                     )
                 tracer = Fieldline_Tracer(
                     StartR=startR[jj],

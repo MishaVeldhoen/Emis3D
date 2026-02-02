@@ -21,7 +21,7 @@ from main.Tokamak import Tokamak
 from main.Util import config_loader
 
 tokamakName = "DIII-D"
-configFileName = "184407_injectionLocation_225/helical_config.yaml"
+configFileName = "helical_config.yaml"  # "elongatedRing_config.yaml"  #
 elongation = 0.3
 polSigma = 0.25
 rotationAngle = 30
@@ -70,10 +70,11 @@ config["rotationAngle"] = rotationAngle
 arg_list = [(val, config) for val in rzArray]
 
 arg_list = arg_list[0]
+arg_list[1]["BOLOMETER_PROPS"] = {"pixelSamples": 500, "numProcessors": 1}
 
 # --- This will not work after I am done testing since the definition will not return the radDist
 hel = Util_radDist.radDist_Helical_parallel_return_radDist(arg_list)
-# hel = Util_radDist.radDist_ElongatedRing_parallel(arg_list)
+# hel = Util_radDist.radDist_ElongatedRing_parallel_return_radDist(arg_list)
 
 
 # --- Find the location of each bolometer

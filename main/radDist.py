@@ -61,7 +61,7 @@ class RadDist(ABC):
 
     def _evalulateCherab(self, X, Y, Z) -> np.ndarray:
         """
-        Wrapper function for self.evalulate to take inputs from Cherab
+        Wrapper function for self.calc_emissivity to take inputs from Cherab
         """
         theta = self.info["rotationAngle"]
 
@@ -69,155 +69,10 @@ class RadDist(ABC):
         # --- Convert phi to be positive
         if phi is not None and phi < 0:
             phi += 2.0 * np.pi
-        emission = self.evaluate([R], [Z], [phi], theta, emissionName=self.emissionName)
+        emission = self.calc_emissivity(
+            [R], [Z], [phi], theta, emissionName=self.emissionName
+        )
         return emission[self.emissionName].item()
-
-    @abstractmethod
-    def evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
-        """
-        Abstract method to be implemented by subclasses to return the emissivity at the given point.
-        """
-        pass
-
-    def build(self) -> None:
-        """
-        Creates radDist, finds the power per bin, observes the world for
-        each bolometer, then saves the data.
-
-        The tokamak should be created by the individual radDist subtypes
-        (helical, elongated ring, etc.) during startup.
-        """
-        self.power_per_bin_calc()
-        self.bolos_observe()
-        self._get_scale_factor()
-        self.saveRadDist()
-
-    def power_per_bin_calc(self, Errfrac=0.01, Pointsupdate=int(1e5)) -> None:
-        """
-        Replaces the power_per_bin_calc with a vectorized version.
-
-        """
-
-        # --- Initilize items
-        self.data = {}
-        self.data["emisSumArray"] = {}
-        self.data["emisSqArray"] = {}
-        self.data["powerPerBin"] = {}
-
-        numBins = self.info["numBins"]
-        angleperbin = 2.0 * np.pi / numBins
-
-        # Ensure tokamak and its info are initialized
-        if not hasattr(self, "tokamak") or self.tokamak is None:
-            raise RuntimeError(
-                "Tokamak object is not initialized. Call _build_tokamak() before power_per_bin_calc()."
-            )
-        if not hasattr(self.tokamak, "info") or self.tokamak.info is None:
-            raise RuntimeError(
-                "Tokamak.info is not initialized. Ensure _build_tokamak() sets up info correctly."
-            )
-
-        volumeperbin = self.tokamak.info["MACHINE"]["volume"] / float(numBins)
-        pointsperbin = 0
-        reachedprecision = 0
-
-        while reachedprecision == 0:
-            pointsperbin += Pointsupdate
-            # --- Create all of the random points first
-            x_, y_, z_, R_, phifirstbin_ = [], [], [], [], []
-            while len(x_) < Pointsupdate:
-                if self.tokamak.wall is None:
-                    raise RuntimeError(
-                        "Tokamak wall is not initialized. Ensure that the wall attribute is set before calling power_per_bin_calc()."
-                    )
-                x, y, z, R, phi = Util_radDist.random_uniform_point_noVolume(
-                    self.tokamak.wall["wallcurve"],
-                    self.tokamak.wall["minr"],
-                    self.tokamak.wall["maxr"],
-                    self.tokamak.wall["minz"],
-                    self.tokamak.wall["maxz"],
-                )
-                x_.append(x)
-                y_.append(y)
-                z_.append(z)
-                R_.append(R)
-
-                # --- Program rotates all points to be within the first bin,
-                # finds the emissivity, then rotates the same points to each
-                # subsequent bin
-                if phi is not None and phi < 0:
-                    phi += 2.0 * np.pi
-                phibin = np.floor(phi / angleperbin)
-                phifirstbin_.append(phi - (angleperbin * phibin))
-
-            # --- Evalulate all of the points at once
-            R_ = np.array(R_)
-            z_ = np.array(z_)
-            theta = self.info["rotationAngle"]
-
-            for numbin in range(0, numBins):
-                # print(f"Calculating powerPerBin {numbin + 1} of {numBins}")
-
-                # --- use the initial point for each toroidal bin
-                phi = np.array(phifirstbin_) + (angleperbin * numbin)
-
-                # Add the emission to the existing arrays
-                for emissionName in self.info["emissionNames"]:
-
-                    # Choose between original emission and emission from Ben's ElongatedHelical Class
-
-                    emission = self.evaluate(
-                        R_, z_, phi, theta, emissionName=emissionName
-                    )
-
-                    if emissionName not in self.data["emisSqArray"]:
-                        self.data["emisSqArray"][emissionName] = np.zeros(numBins)
-                        self.data["emisSumArray"][emissionName] = np.zeros(numBins)
-                        self.data["powerPerBin"][emissionName] = np.zeros(numBins)
-
-                    self.data["emisSumArray"][emissionName][numbin] += emission[
-                        emissionName
-                    ].sum()
-                    self.data["emisSqArray"][emissionName][numbin] += (
-                        emission[emissionName] ** 2
-                    ).sum()
-
-            # --- Check to see if the desired precision is reached
-            # I believe they are checking to see if the variance between bins
-            # is small? -JLH
-            emismeanarray = {}
-            emisvararray = {}
-            integemisarray = {}
-            totintegemis = 0
-            integemisvararray = {}
-            integemiserrarray = {}
-            totintegemiserr = 0
-
-            for key_ in self.data["emisSumArray"]:
-                emismeanarray[key_] = self.data["emisSumArray"][key_] / pointsperbin
-                emisvararray[key_] = (self.data["emisSqArray"][key_] / pointsperbin) - (
-                    emismeanarray[key_] ** 2
-                )
-                integemisarray[key_] = volumeperbin * emismeanarray[key_]
-
-                totintegemis += np.sum(integemisarray[key_])
-
-                integemisvararray[key_] = (
-                    volumeperbin**2 * emisvararray[key_] / pointsperbin
-                )
-                integemiserrarray[key_] = np.sqrt(integemisvararray[key_])
-                totintegemiserr += np.sum(integemiserrarray[key_])
-            toterrfrac = totintegemiserr / totintegemis
-
-            if toterrfrac < Errfrac:
-                reachedprecision = 1
-                for key_ in integemisarray:
-                    self.data["powerPerBin"][key_] = integemisarray[key_]
-            else:
-                if pointsperbin % (Pointsupdate * 100) == 0:
-                    print(
-                        f"Number of points {pointsperbin}, total std. err fraction so far = {toterrfrac:.2e}"
-                    )
 
     def _update_bolometer_properties(self) -> None:
         """
@@ -284,6 +139,188 @@ class RadDist(ABC):
                 )
             scaleFactor[emissionName] = temp
         self.data["scaleFactor"] = scaleFactor
+
+    @abstractmethod
+    def _evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
+        """
+        Abstract method to be implemented by subclasses to return the emissivity at the given R, z, phi and theta.
+        """
+        pass
+
+    def calc_emissivity(self, R, z, phi, theta, emissionName=None) -> dict:
+        """
+        Checks that R, z, phi, and theta are withink the tokamak wall limits, then calls _evaluate to get the emissivity.
+        """
+
+        # Making sure the inputs arrays are of the correct type
+        R = np.atleast_1d(R).astype(float)
+        z = np.atleast_1d(z).astype(float)
+        phi = np.atleast_1d(phi).astype(float)
+        theta = np.atleast_1d(theta).astype(float)
+
+        # --- First call _evaluate to get the emissivity, then check if it is inside the tokamak, if not return 0
+        # emiss format: {emissionName: np.array[self._evalutate(R0,z0,phi0,theta0), self._evalutate(R1,z1,phi1,theta1), ...]}
+        # aka, it is an array of emission at each R, z, phi, and theta location
+        emiss = self._evaluate(R, z, phi, theta, emissionName=emissionName)
+
+        # --- Checking to see if each point is inside the tokamak wall
+        if len(R) == 1:
+            R = np.full(len(z), R[0])
+        elif len(z) == 1:
+            z = np.full(len(R), z[0])
+        elif len(R) != len(z):
+            raise ValueError(
+                "R and z must be the same length, or one of them must be length 1."
+            )
+
+        points = np.column_stack((R, z))
+        inside = self.tokamak._inside_tokamak(points)
+
+        # --- Multiply the emissivity by 1 if inside, 0 if outside
+        result = np.zeros_like(inside, dtype=float)
+        result[inside] = 1.0
+
+        # Return the emissivity values for each point, setting to 0 if outside the tokamak
+        for emissionName in emiss:
+            emiss[emissionName] *= result
+        return emiss
+
+    def build(self) -> None:
+        """
+        Creates radDist, finds the power per bin, observes the world for
+        each bolometer, then saves the data.
+
+        The tokamak should be created by the individual radDist subtypes
+        (helical, elongated ring, etc.) during startup.
+        """
+        self.power_per_bin_calc()
+        self.bolos_observe()
+        self._get_scale_factor()
+        self.saveRadDist()
+
+    def power_per_bin_calc(self, Errfrac=0.01, Pointsupdate=int(1e5)) -> None:
+        """
+        Replaces the power_per_bin_calc with a vectorized version.
+        """
+
+        # --- Initilize items
+        self.data = {}
+        self.data["emisSumArray"] = {}
+        self.data["emisSqArray"] = {}
+        self.data["powerPerBin"] = {}
+
+        numBins = self.info["numBins"]
+        angleperbin = 2.0 * np.pi / numBins
+
+        # Ensure tokamak and its info are initialized
+        if not hasattr(self, "tokamak") or self.tokamak is None:
+            raise RuntimeError(
+                "Tokamak object is not initialized. Call _build_tokamak() before power_per_bin_calc()."
+            )
+        if not hasattr(self.tokamak, "info") or self.tokamak.info is None:
+            raise RuntimeError(
+                "Tokamak.info is not initialized. Ensure _build_tokamak() sets up info correctly."
+            )
+
+        volumeperbin = self.tokamak.info["MACHINE"]["volume"] / float(numBins)
+        pointsperbin = 0
+        reachedprecision = 0
+
+        while reachedprecision == 0:
+            pointsperbin += Pointsupdate
+            # --- Create all of the random points first
+            x_, y_, z_, R_, phifirstbin_ = [], [], [], [], []
+            while len(x_) < Pointsupdate:
+                if self.tokamak.wall is None:
+                    raise RuntimeError(
+                        "Tokamak wall is not initialized. Ensure that the wall attribute is set before calling power_per_bin_calc()."
+                    )
+                # Find random point within the wallcurve
+                x, y, z, R, phi = Util_radDist.random_uniform_point_noVolume(
+                    self.tokamak.wall["wallcurve"],
+                    self.tokamak.wall["minr"],
+                    self.tokamak.wall["maxr"],
+                    self.tokamak.wall["minz"],
+                    self.tokamak.wall["maxz"],
+                )
+                x_.append(x)
+                y_.append(y)
+                z_.append(z)
+                R_.append(R)
+
+                # --- Program rotates all points to be within the first bin,
+                # finds the emissivity, then rotates the same points to each
+                # subsequent bin
+                if phi is not None and phi < 0:
+                    phi += 2.0 * np.pi
+                phibin = np.floor(phi / angleperbin)
+                phifirstbin_.append(phi - (angleperbin * phibin))
+
+            # --- Evalulate all of the points at once
+            R_ = np.array(R_)
+            z_ = np.array(z_)
+            theta = self.info["rotationAngle"]
+
+            for numbin in range(0, numBins):
+                # print(f"Calculating powerPerBin {numbin + 1} of {numBins}")
+
+                # --- use the initial point for each toroidal bin
+                phi = np.array(phifirstbin_) + (angleperbin * numbin)
+
+                # Add the emission to the existing arrays
+                for emissionName in self.info["emissionNames"]:
+
+                    emission = self.calc_emissivity(
+                        R_, z_, phi, theta, emissionName=emissionName
+                    )
+
+                    if emissionName not in self.data["emisSqArray"]:
+                        self.data["emisSqArray"][emissionName] = np.zeros(numBins)
+                        self.data["emisSumArray"][emissionName] = np.zeros(numBins)
+                        self.data["powerPerBin"][emissionName] = np.zeros(numBins)
+
+                    self.data["emisSumArray"][emissionName][numbin] += emission[
+                        emissionName
+                    ].sum()
+                    self.data["emisSqArray"][emissionName][numbin] += (
+                        emission[emissionName] ** 2
+                    ).sum()
+
+            # --- Check to see if the desired precision is reached
+            # I believe they are checking to see if the variance between bins is small? -JLH
+            emismeanarray = {}
+            emisvararray = {}
+            integemisarray = {}
+            totintegemis = 0
+            integemisvararray = {}
+            integemiserrarray = {}
+            totintegemiserr = 0
+
+            for key_ in self.data["emisSumArray"]:
+                emismeanarray[key_] = self.data["emisSumArray"][key_] / pointsperbin
+                emisvararray[key_] = (self.data["emisSqArray"][key_] / pointsperbin) - (
+                    emismeanarray[key_] ** 2
+                )
+                integemisarray[key_] = volumeperbin * emismeanarray[key_]
+
+                totintegemis += np.sum(integemisarray[key_])
+
+                integemisvararray[key_] = (
+                    volumeperbin**2 * emisvararray[key_] / pointsperbin
+                )
+                integemiserrarray[key_] = np.sqrt(integemisvararray[key_])
+                totintegemiserr += np.sum(integemiserrarray[key_])
+            toterrfrac = totintegemiserr / totintegemis
+
+            if toterrfrac < Errfrac:
+                reachedprecision = 1
+                for key_ in integemisarray:
+                    self.data["powerPerBin"][key_] = integemisarray[key_]
+            else:
+                if pointsperbin % (Pointsupdate * 100) == 0:
+                    print(
+                        f"Number of points {pointsperbin}, total std. err fraction so far = {toterrfrac:.2e}"
+                    )
 
     def bolos_observe(self) -> None:
         """
@@ -411,8 +448,8 @@ class RadDist(ABC):
         loc_ = []
         for emissionName in self.info["emissionNames"]:
             for ii in range(rarray.shape[0]):
-                temp = self.evaluate(
-                    rarray[ii],
+                temp = self.calc_emissivity(
+                    [rarray[ii]],
                     zarray,
                     phi=[phi],
                     theta=theta,
@@ -540,7 +577,7 @@ class Helical(RadDist):
         ]
         self.info["numTransists"] = numTransists
 
-    def evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
+    def _evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
         """
         Return the emissivity (W/m^3/rad) at the point (R,z,ph) according to this
         instantiation of Emis3D.
@@ -617,7 +654,7 @@ class Helical(RadDist):
                 * np.exp(-0.5 * (paralleldist**2) / self.info["polSigma"] ** 2)
             )
 
-            localEmis[emissionName] = emis
+            localEmis[emissionName] = emis.flatten()
 
         return localEmis
 
@@ -659,9 +696,9 @@ class ElongatedRing(RadDist):
     ):
         # Ensure startR and startZ are floats, not None
         if startR is None:
-            startR = float(config.get("startR", 2.96))
+            startR = float(config.get("startR"))
         if startZ is None:
-            startZ = float(config.get("startZ", 0.0))
+            startZ = float(config.get("startZ"))
 
         super(ElongatedRing, self).__init__(startR=startR, startZ=startZ, config=config)
         self.info["distType"] = "elongatedRing"
@@ -680,7 +717,7 @@ class ElongatedRing(RadDist):
 
             print(str_)
 
-    def evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
+    def _evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
         """
         Find the emissivity given and input R, z, and phi location
         """
