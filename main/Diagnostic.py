@@ -64,7 +64,9 @@ class Bolometer(object):
                 self.name = self.info["NAME"]
             else:
                 self.name = None
-                print(f"Configuration file loaded but missing 'NAME' key: {pathFileName}")
+                print(
+                    f"Configuration file loaded but missing 'NAME' key: {pathFileName}"
+                )
         else:
             self.info = None
             self.name = None
@@ -100,7 +102,9 @@ class Bolometer(object):
             else:
                 print(f"Build type of {self.info['BUILD_TYPE']} not yet supported!")
         else:
-            print("Bolometer configuration info is missing or incomplete; cannot build camera.")
+            print(
+                "Bolometer configuration info is missing or incomplete; cannot build camera."
+            )
 
     def _build_from_primitives(self) -> None:
         """
@@ -120,7 +124,9 @@ class Bolometer(object):
         """
 
         if self.info is None:
-            print("Bolometer configuration info is missing; cannot build from primitives.")
+            print(
+                "Bolometer configuration info is missing; cannot build from primitives."
+            )
             return
 
         # --- Convenient constants

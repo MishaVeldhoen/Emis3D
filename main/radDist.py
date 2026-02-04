@@ -15,7 +15,7 @@ from matplotlib import cm
 from raysect.core.math import translate
 from raysect.optical import VolumeTransform  # type: ignore
 
-from raysect.primitive import Cylinder
+from raysect.primitive import Cylinder, Subtract
 
 import main.Util_radDist as Util_radDist
 from main.Globals import *
@@ -359,28 +359,39 @@ class RadDist(ABC):
             raise RuntimeError(
                 "Tokamak wall is not initialized. Ensure that the wall attribute is set before calling bolos_observe()."
             )
-        dz = np.abs(self.tokamak.wall["maxz"]) + np.abs(self.tokamak.wall["minz"])
-        dR = np.abs(self.tokamak.wall["maxz"]) + np.abs(self.tokamak.wall["minz"])
-        radius = np.round(dR * 1.2, 2)
-        height = np.round(dz * 1.2, 2)
-        offset = -np.round(height / 2.0, 2)
-        emitter = Cylinder(
-            radius=radius, height=height, transform=translate(0, 0, offset)
-        )
-        emitter.parent = self.tokamak.world
+
+        if False:
+            height = np.abs(self.tokamak.wall["maxz"]) + np.abs(
+                self.tokamak.wall["minz"]
+            )
+            offset = self.tokamak.wall["minz"]
+            rout = self.tokamak.wall["maxr"]
+            rin = self.tokamak.wall["minr"]
+
+        emitter = None
+        # --- Add the emitter to the tokamak wall
+        for val in self.tokamak.world.children:
+            if val.name == "Tokamak Wall":
+                emitter = val
+
+        if emitter is not None:
+            emittting_material = VolumeTransform(
+                RadiationFunction(self._evalulateCherab), emitter.transform.inverse()
+            )
+            emitter.material = emittting_material
+        else:
+            raise RuntimeError(
+                "Could not find Tokamak Wall in tokamak.world.children during bolos_observe()."
+            )
 
         # --- Loop over each emission function within the radDist, then each bolometer
         for emissionName in self.info["emissionNames"]:
 
             # --- Add this to the data arrays
             self.emissionName = emissionName
-            emitter.material = VolumeTransform(
-                RadiationFunction(self._evalulateCherab), emitter.transform.inverse()
-            )
 
             # --- Observe with each bolometer
             for bolo_ in boloCameras:
-                # print(f"Observing {emissionName} for {bolo_.name}")
                 observeVal = []
                 observeVal_error = []
                 ch_order = []

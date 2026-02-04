@@ -19,9 +19,9 @@ from raysect.core import Point3D
 from raysect.core.math import rotate_z, translate
 from raysect.optical import World
 from raysect.optical.library import RoughTungsten
-from raysect.optical import AbsorbingSurface  # type: ignore
+from raysect.optical import AbsorbingSurface, NullSurface  # type: ignore
 
-from raysect.primitive import Box, Cylinder, import_stl
+from raysect.primitive import Cylinder, import_stl, Subtract
 
 from main.Diagnostic import Bolometer
 from main.Fieldline_Tracer import Fieldline_Tracer
@@ -81,11 +81,7 @@ class Tokamak(object):
             )
 
             # --- Run the startup program
-            self._tokamak_startup()
-
-            # --- Load the bolometers
-            if loadBolometers:
-                self._load_bolometers()
+            self._tokamak_startup(loadBolometers=loadBolometers)
 
     def _load_config_file(self, tokamakName, mode, reflections, eqFileName) -> None:
         """
@@ -118,25 +114,34 @@ class Tokamak(object):
         self.info["reflections"] = reflections
         self.info["eqFileName"] = eqFileName
 
-    def _tokamak_startup(self) -> None:
+    def _tokamak_startup(self, loadBolometers=False) -> None:
         """
         This definition will:
         1. Load the equilibrium file, if given
-        1. Load the wall file, defaults to what is in the equilibrium file
-        3. Builds the tokamak (if mode = Build)
-        4. Load the bolometers
+        2. Load the bolometers
+        3. Load the wall file, defaults to what is in the equilibrium file
+        4. Builds the tokamak (if mode = Build)
         """
 
         if self.info is None:
             print("No tokamak information loaded, cannot continue!")
             return
 
+        # --- Create the raysect world
+        self.world = World()
+
         # --- Load the equilibrium file
         if self.info["eqFileName"] is not None:
             self._load_eqFile()
 
+        # --- Load the bolometers
+        if loadBolometers:
+            self._load_bolometers()
+
+        # --- Load the first wall
         self._load_first_wall()
-        self.world = World()
+
+        # --- Create boundries in the raysect world
         if self.info["mode"].upper() == "BUILD":
             self._build_tokamak()
 
@@ -225,39 +230,53 @@ class Tokamak(object):
         # Building a closed universe
         if hasattr(self, "wall") and load_stl == False:
             if self.wall is not None:
+                # --- Find the z limits
+                if "Bolometer Z Limits" in self.info:
+                    minz = np.min(
+                        [self.wall["minz"], self.info["Bolometer Z Limits"][0]]
+                    ).astype(float)
+                    maxz = np.max(
+                        [self.wall["maxz"], self.info["Bolometer Z Limits"][1]]
+                    ).astype(float)
+                else:
+                    minz = self.wall["minz"]
+                    maxz = self.wall["maxz"]
+                height = np.abs(maxz) + np.abs(minz)
+                offset = minz
+
+                # --- Find the R limits
+                if "Bolometer R Limits" in self.info:
+                    minR = np.min(
+                        [self.wall["minr"], self.info["Bolometer R Limits"][0]]
+                    ).astype(float)
+                    maxR = np.max(
+                        [self.wall["maxr"], self.info["Bolometer R Limits"][1]]
+                    ).astype(float)
+                else:
+                    minR = self.wall["minr"]
+                    maxR = self.wall["maxr"]
+
                 # --- Outer wall
-                Cylinder(
-                    radius=self.wall["maxr"] * 3.0,
-                    height=self.wall["maxz"] * 3.0,
-                    material=AbsorbingSurface(),
+                cylinder_outer = Cylinder(
+                    radius=maxR,
+                    height=height,
                     name="Outer wall",
-                    parent=self.world,
-                    transform=translate(0, 0, (-1) * (self.wall["maxz"] * 3.0) / 2.0),
-                )
-                # Inner wall
-                Cylinder(
-                    radius=self.wall["minr"],
-                    height=self.wall["maxz"] * 3.0,
-                    material=AbsorbingSurface(),
-                    name="Inner wall",
-                    parent=self.world,
-                    transform=translate(0, 0, (-1) * (self.wall["maxz"] * 3.0) / 2.0),
                 )
 
-                # Top and bottom of tokamak
-                Box(
-                    lower=Point3D(-10, -10, self.wall["maxz"] * 1.5 - 0.1),
-                    upper=Point3D(10, 10, self.wall["maxz"] * 1.5),
-                    parent=self.world,
-                    material=AbsorbingSurface(),
-                    name="Top of machine",
+                # --- Inner wall
+                cylinder_inner = Cylinder(
+                    radius=minR,
+                    height=height,
+                    name="Inner wall",
                 )
-                Box(
-                    lower=Point3D(-10, -10, self.wall["minz"] * 1.5 - 0.1),
-                    upper=Point3D(10, 10, self.wall["minz"] * 1.5),
+
+                wall = Subtract(
+                    cylinder_outer,
+                    cylinder_inner,
+                    material=AbsorbingSurface(),  # NullSurface(),
+                    name="Tokamak Wall",
                     parent=self.world,
-                    material=AbsorbingSurface(),
-                    name="Bottom of machine",
+                    transform=translate(0, 0, offset),
                 )
 
         # --- Load the CAD file
@@ -304,10 +323,18 @@ class Tokamak(object):
 
         """
         self.bolometers = []
+
         if self.info is None:
             print("No tokamak information loaded, cannot continue!")
             return
+        # --- Store all of the bolometer groups, used to make plotting easier
+        self.info["Bolometer Groups"] = []
 
+        # --- Find the maximum and minimum locations of the bolometer, used to create the world
+        r_limits = [1000, 0]
+        z_limits = [1000, -1000]
+
+        # --- Create each bolometer in the tokamak configuration file
         for bolo in self.info["BOLOMETERS"]:
             b_ = Bolometer(
                 world=self.world,
@@ -315,6 +342,24 @@ class Tokamak(object):
                 configFileName=self.info["BOLOMETERS"][bolo]["configFileName"],
             )
             self.bolometers.append(b_)
+
+            if b_.info is not None:
+                offset = np.abs(b_.info["SLIT_SENSOR_SEPARATION"])
+                if b_.info["CAMERA_POSITION_R_Z_PHI"][0] + offset > r_limits[1]:
+                    r_limits[1] = b_.info["CAMERA_POSITION_R_Z_PHI"][0] + offset
+                if b_.info["CAMERA_POSITION_R_Z_PHI"][0] - offset < r_limits[0]:
+                    r_limits[0] = b_.info["CAMERA_POSITION_R_Z_PHI"][0] - offset
+                if b_.info["CAMERA_POSITION_R_Z_PHI"][1] + offset > z_limits[1]:
+                    z_limits[1] = b_.info["CAMERA_POSITION_R_Z_PHI"][1] + offset
+                if b_.info["CAMERA_POSITION_R_Z_PHI"][1] - offset < z_limits[0]:
+                    z_limits[0] = b_.info["CAMERA_POSITION_R_Z_PHI"][1] - offset
+
+                if b_.info["GROUP_NAME"] not in self.info["Bolometer Groups"]:
+                    self.info["Bolometer Groups"].append(b_.info["GROUP_NAME"])
+
+        # --- Used to create the cherab bounding box for the bolometers
+        self.info["Bolometer R Limits"] = r_limits
+        self.info["Bolometer Z Limits"] = z_limits
 
     def _inside_tokamak(self, points) -> bool:
         """
@@ -415,37 +460,45 @@ class Tokamak(object):
                 lw=2,
             )
 
-    def _plot_bolometers(self, ax, boloName) -> None:
+    def _plot_bolometers(self, ax, boloGroupName) -> None:
         """
-        Plots the chords for a specific bolometer
+        Plots the chords for a specific bolometer group
         """
 
-        # --- Find the correct index
-        bolo_tokamak = []
+        # --- Make sure self.info is initiated
+        if self.info is None:
+            print("No tokamak information loaded, cannot continue!")
+            return
+
+        # --- Check to see if boloGroupName is in self.info['Bolometer Groups']
+        if boloGroupName not in self.info["Bolometer Groups"]:
+            print(f"{boloGroupName} is not found in self.info['Bolometer Groups']")
+            return
+
+        # --- Loop over each bolometer, only plot those with the correct group name
         for bolo in self.bolometers:
-            bolo_tokamak.append(bolo.name)
+            if bolo.info["GROUP_NAME"] == boloGroupName:
 
-        indx_ = bolo_tokamak.index(boloName)
-        for foil in self.bolometers[indx_].bolometer_camera:
-            slit_centre = foil.slit.centre_point
-            slit_centre_rz = point3d_to_rz(slit_centre)
-            ax.plot(slit_centre_rz[0], slit_centre_rz[1], "ko")
-            origin, hit, _ = foil.trace_sightline()
-            centre_rz = point3d_to_rz(foil.centre_point)
-            ax.plot(centre_rz[0], centre_rz[1], "kx")
-            origin_rz = point3d_to_rz(origin)
-            hit_rz = point3d_to_rz(hit)
-            ax.plot([origin_rz[0], hit_rz[0]], [origin_rz[1], hit_rz[1]], "k")
-            ax.text(
-                hit_rz[0],
-                hit_rz[1],
-                int(foil.name[-2:]),
-                fontsize="10",
-                ha="center",
-                va="center",
-                weight="bold",
-            )
-            ax.set_title(boloName)
+                for foil in bolo.bolometer_camera:
+                    slit_centre = foil.slit.centre_point
+                    slit_centre_rz = point3d_to_rz(slit_centre)
+                    ax.plot(slit_centre_rz[0], slit_centre_rz[1], "ko")
+                    origin, hit, _ = foil.trace_sightline()
+                    centre_rz = point3d_to_rz(foil.centre_point)
+                    ax.plot(centre_rz[0], centre_rz[1], "kx")
+                    origin_rz = point3d_to_rz(origin)
+                    hit_rz = point3d_to_rz(hit)
+                    ax.plot([origin_rz[0], hit_rz[0]], [origin_rz[1], hit_rz[1]], "k")
+                    ax.text(
+                        hit_rz[0],
+                        hit_rz[1],
+                        int(foil.name[-2:]),
+                        fontsize="10",
+                        ha="center",
+                        va="center",
+                        weight="bold",
+                    )
+        ax.set_title(boloGroupName)
 
     def plot(self, fieldLineStartPhi=None) -> None:
         """

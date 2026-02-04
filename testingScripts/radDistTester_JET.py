@@ -1,10 +1,10 @@
-# radDistTester_DIII-D.py
+# radDistTester_JET.py
 """
 This program will group similar SXR arrays, then plot out
 the chords, radDist contour plot, and the observed radiation
 below.
 
-It is currently specific to DIII-D
+It is currently specific to JET
 """
 
 import os
@@ -20,20 +20,15 @@ from main.Globals import *
 from main.Tokamak import Tokamak
 from main.Util import config_loader
 
-tokamakName = "DIII-D"
+tokamakName = "JET"
 configFileName = "elongatedRing_config.yaml"  # "helical_config.yaml"  #
 elongation = 0.3
 polSigma = 0.25
 rotationAngle = 30
-rzvalues = [1.3, 0.0]  # [1.3, 0.0]
+rzvalues = [3.62, 0.5]
 
 # --- Group the bolometers
-bolometerNames = [
-    ["SX90PF_UP", "SX90PF_DOWN"],
-    ["SX90MF_UP", "SX90MF_DOWN"],
-    ["DISRADU_UP", "DISRADU_DOWN"],
-    #  ["SX45F_UP", "SX45F_DOWN"],
-]
+bolometerNames = [["KB5V_01"], ["KB5H_01"]]
 
 
 def point3d_to_rz(point):
@@ -52,7 +47,6 @@ tok = Tokamak(
     tokamakName=tokamakName,
     mode="Build",
     reflections=False,
-    eqFileName="g184407.02100",
     loadBolometers=False,
     verbose=True,
 )
@@ -135,9 +129,9 @@ if True:
     f_top.set_title("Injection Location")
 
     # --- Plot the observed emissivities
-
     colors = ["black", "purple", "blue", "green", "orange", "red"]
 
+if True:
     for ii, boloGroup in enumerate(bolometerNames):
         f_top = f.add_subplot(2, num_rows, ii + 6)
         for qq, emissionName in enumerate(hel.info["emissionNames"]):
@@ -162,10 +156,10 @@ if True:
                 color=colors[qq],
                 label=emissionName,
             )
-        f_top.set_title(hel.tokamak.bolometers[indx_].name)
+
         f_top.legend()
         f_top.set_ylabel(f"{hel.data['units']}")
         f_top.set_xlabel("channel")
 
-    plt.tight_layout()
-    plt.show()
+plt.tight_layout()
+plt.show()
