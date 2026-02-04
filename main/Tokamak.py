@@ -19,7 +19,7 @@ from raysect.core import Point3D
 from raysect.core.math import rotate_z, translate
 from raysect.optical import World
 from raysect.optical.library import RoughTungsten
-from raysect.optical import AbsorbingSurface, NullSurface  # type: ignore
+from raysect.optical import AbsorbingSurface  # type: ignore
 
 from raysect.primitive import Cylinder, import_stl, Subtract
 
@@ -258,23 +258,46 @@ class Tokamak(object):
 
                 # --- Outer wall
                 cylinder_outer = Cylinder(
-                    radius=maxR,
-                    height=height,
+                    radius=maxR + 0.2,
+                    height=height + 0.2,
                     name="Outer wall",
                 )
 
                 # --- Inner wall
                 cylinder_inner = Cylinder(
-                    radius=minR,
-                    height=height,
+                    radius=minR - 0.2,
+                    height=height + 0.2,
                     name="Inner wall",
                 )
 
                 wall = Subtract(
                     cylinder_outer,
                     cylinder_inner,
-                    material=AbsorbingSurface(),  # NullSurface(),
+                    material=AbsorbingSurface(),
                     name="Tokamak Wall",
+                    parent=self.world,
+                    transform=translate(0, 0, offset - 0.1),
+                )
+
+                # --- Have the emission surface inside the tokamak
+                # --- Outer wall
+                emiss_outer = Cylinder(
+                    radius=self.wall["maxr"],
+                    height=height,
+                    name="Outer wall",
+                )
+
+                # --- Inner wall
+                emiss_inner = Cylinder(
+                    radius=self.wall["minr"],
+                    height=height,
+                    name="Inner wall",
+                )
+
+                emiss_surface = Subtract(
+                    emiss_outer,
+                    emiss_inner,
+                    name="Emission Surface",
                     parent=self.world,
                     transform=translate(0, 0, offset),
                 )

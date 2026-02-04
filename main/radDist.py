@@ -13,7 +13,7 @@ import numpy as np
 from cherab.tools.emitters import RadiationFunction
 from matplotlib import cm
 from raysect.core.math import translate
-from raysect.optical import VolumeTransform  # type: ignore
+from raysect.optical import VolumeTransform, NullMaterial  # type: ignore
 
 from raysect.primitive import Cylinder, Subtract
 
@@ -183,6 +183,7 @@ class RadDist(ABC):
         # Return the emissivity values for each point, setting to 0 if outside the tokamak
         for emissionName in emiss:
             emiss[emissionName] *= result
+
         return emiss
 
     def build(self) -> None:
@@ -360,18 +361,10 @@ class RadDist(ABC):
                 "Tokamak wall is not initialized. Ensure that the wall attribute is set before calling bolos_observe()."
             )
 
-        if False:
-            height = np.abs(self.tokamak.wall["maxz"]) + np.abs(
-                self.tokamak.wall["minz"]
-            )
-            offset = self.tokamak.wall["minz"]
-            rout = self.tokamak.wall["maxr"]
-            rin = self.tokamak.wall["minr"]
-
         emitter = None
         # --- Add the emitter to the tokamak wall
         for val in self.tokamak.world.children:
-            if val.name == "Tokamak Wall":
+            if val.name == "Emission Surface":
                 emitter = val
 
         if emitter is not None:
@@ -495,6 +488,16 @@ class RadDist(ABC):
                 weight="bold",
             )
 
+    def _make_raysect_surface_transparent(self, surfaceName="") -> None:
+        """
+        Makes the raysect object transparent. This is done after observation in order
+        for the sightlines to trace properly
+        """
+        # --- Add the emitter to the tokamak wall
+        for val in self.tokamak.world.children:
+            if val.name == surfaceName:
+                val.material = NullMaterial()
+
     def plotOverview(self, return_figure=False):
         """
         Plots the bolometer chords with a contour overplot of the radDist in the top row
@@ -503,6 +506,9 @@ class RadDist(ABC):
         return_figure :: True = returns the figure object
 
         """
+
+        # --- Make the emission surface transparent for accurate ray tracing
+        self._make_raysect_surface_transparent(surfaceName="Emission Surface")
 
         # --- Plot everything ---
         # Top row: every bolometer with radDist contour overplot + injection location radDist on the right
@@ -569,6 +575,7 @@ class RadDist(ABC):
                     )
 
                 f_.legend()
+                f_.set_ylim(0, f_.get_ylim()[1])
                 f_.set_ylabel(f"{self.data['units']}")
                 f_.set_xlabel("channel")
                 f_.set_title(boloGroup)
