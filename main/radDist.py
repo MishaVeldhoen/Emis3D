@@ -21,7 +21,7 @@ import main.Util_radDist as Util_radDist
 from main.Globals import *
 from main.Tokamak import Tokamak
 from main.Util import XY_To_RPhi, convert_arrays_to_list, save_json
-
+import matplotlib.pyplot as plt
 
 from abc import ABC, abstractmethod
 
@@ -479,7 +479,9 @@ class RadDist(ABC):
 
             _, ax = plt.subplots()
 
-        ax.contourf(rarray, zarray, emiss.transpose(), cmap=cm.get_cmap("BuGn"))
+        ax.contourf(
+            rarray, zarray, emiss.transpose(), levels=100, cmap=cm.get_cmap("Reds")
+        )
 
         for ii, emissionName in enumerate(self.info["emissionNames"]):
             ax.text(
@@ -492,6 +494,91 @@ class RadDist(ABC):
                 color="black",
                 weight="bold",
             )
+
+    def plotOverview(self, return_figure=False):
+        """
+        Plots the bolometer chords with a contour overplot of the radDist in the top row
+        Plots the observed emissivities in the bottom row
+
+        return_figure :: True = returns the figure object
+
+        """
+
+        # --- Plot everything ---
+        # Top row: every bolometer with radDist contour overplot + injection location radDist on the right
+        tok = self.tokamak
+        colors = ["black", "purple", "blue", "green", "orange", "red"]
+        if tok.info is not None:
+            boloGroups = tok.info["Bolometer Groups"]
+            bolometers = tok.bolometers
+
+            num_columns = len(boloGroups) + 1
+            num_rows = 2
+            f = plt.figure(figsize=(15, 8))
+            plot_count = 0
+
+            # --- Loop over each bolometer group
+            for ii, boloGroup in enumerate(boloGroups):
+                plot_count += 1
+                f_ = f.add_subplot(num_rows, num_columns, plot_count)
+                tok._plot_first_wall(f_)
+                tok._plot_bolometers(f_, boloGroupName=boloGroup, plot_chord_info=True)
+
+                # --- Plot a cross-section of the radDist
+                phi = tok.get_ave_bolometer_tor_loc(boloGroupName=boloGroup)
+                if phi is not None:
+                    self.plotCrossSection(phi=np.deg2rad(phi), ax=f_)
+
+            # --- Plot the injection location
+            plot_count += 1
+            phi = self.info["injectionLocation"]
+            f_ = f.add_subplot(num_rows, num_columns, plot_count)
+            tok._plot_first_wall(f_)
+            self.plotCrossSection(phi=np.deg2rad(phi), ax=f_)
+            f_.set_title(f"Injection Location, phi = {phi} degrees")
+
+            # --- Plot the observed emissivities
+            for ii, boloGroup in enumerate(boloGroups):
+                plot_count += 1
+                f_ = f.add_subplot(num_rows, num_columns, plot_count)
+
+                for qq, emissionName in enumerate(self.info["emissionNames"]):
+                    # --- Group the data
+                    data_ = []
+                    chan_ = []
+
+                    for jj, bolo in enumerate(bolometers):
+                        if bolo.info["GROUP_NAME"] == boloGroup:
+                            ch_tags = bolo.info["CHANNEL_TAGS"]
+                            c_ = []
+                            for ch in ch_tags:  # type: ignore
+                                c_.append(int(ch[-2:]))
+
+                            data_ += self.data[self.info["units"]][emissionName][
+                                bolo.info["NAME"]
+                            ]
+                            chan_ += c_
+
+                    # --- Sort the channel list in ascending order
+                    inds = np.array(chan_).argsort()
+                    f_.plot(
+                        np.array(chan_)[inds],
+                        np.array(data_)[inds],
+                        color=colors[qq],
+                        label=emissionName,
+                    )
+
+                f_.legend()
+                f_.set_ylabel(f"{self.data['units']}")
+                f_.set_xlabel("channel")
+                f_.set_title(boloGroup)
+
+            plt.tight_layout()
+
+            if return_figure:
+                return f
+            else:
+                plt.show()
 
     def saveRadDist(self) -> None:
         """

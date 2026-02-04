@@ -530,8 +530,32 @@ class Tokamak(object):
                                 color="green",
                                 label=label_,
                             )
-        ax.legend()
+        ax.legend(loc="upper right")
         ax.set_title(boloGroupName)
+
+    def get_ave_bolometer_tor_loc(self, boloGroupName):
+        """
+        Returns the average toroidal angle of the bolometer group
+        """
+
+        phi = []
+
+        # --- Make sure self.info is initiated
+        if self.info is None:
+            print("No tokamak information loaded, cannot continue!")
+            return None
+
+        # --- Check to see if boloGroupName is in self.info['Bolometer Groups']
+        if boloGroupName not in self.info["Bolometer Groups"]:
+            print(f"{boloGroupName} is not found in self.info['Bolometer Groups']")
+            return None
+
+        # --- Loop over each bolometer, only plot add with the correct group name
+        for bolo in self.bolometers:
+            if bolo.info["GROUP_NAME"] == boloGroupName:
+                phi.append(bolo.info["CAMERA_POSITION_R_Z_PHI"][2])
+
+        return np.mean(np.array(phi))
 
     def plot(self, fieldLineStartPhi=None) -> None:
         """

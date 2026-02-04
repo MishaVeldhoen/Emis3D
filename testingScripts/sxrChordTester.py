@@ -16,7 +16,7 @@ from main.Tokamak import Tokamak
 
 
 t = Tokamak(
-    tokamakName="DIII-D",
+    tokamakName="JET",
     mode="Build",
     reflections=False,
     loadBolometers=True,
@@ -24,7 +24,7 @@ t = Tokamak(
 
 
 # Plot in 3D to see if it is at the correct toroidal location
-if False:
+if True:
     t.plot()
 
 # --- Plot each individual bolometer
