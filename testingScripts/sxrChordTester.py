@@ -3,11 +3,6 @@
 Loads all of the bolometers on the diagnostic, calculates
 the chord position based off the SXR input file(s) and overlays
 the measured chords in the SXR input file(s).
-
-TODO:
-1. Some weird bug happens when I load more than one bolometer, it's like they don't
-trace the rays to the wall correctly
-
 """
 
 import os
@@ -21,7 +16,7 @@ from main.Tokamak import Tokamak
 
 
 t = Tokamak(
-    tokamakName="JET",
+    tokamakName="DIII-D",
     mode="Build",
     reflections=False,
     loadBolometers=True,
@@ -46,7 +41,7 @@ if t.info is not None:
     for ii, boloGroup in enumerate(boloGroups):
         f_ = f.add_subplot(num_rows, int(num_figs / num_rows), ii + 1)
         t._plot_first_wall(f_)
-        t._plot_bolometers(f_, boloGroupName=boloGroup)
+        t._plot_bolometers(f_, boloGroupName=boloGroup, plot_chord_info=True)
 
     plt.tight_layout()
     plt.show()

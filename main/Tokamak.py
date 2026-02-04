@@ -460,9 +460,13 @@ class Tokamak(object):
                 lw=2,
             )
 
-    def _plot_bolometers(self, ax, boloGroupName) -> None:
+    def _plot_bolometers(self, ax, boloGroupName, plot_chord_info=False) -> None:
         """
         Plots the chords for a specific bolometer group
+        ax :: matplotlib.plot
+        boloGroupName :: The GROUP_NAME in each bolometer file
+        plot_chord_info :: Plot r0, rf, etc. in each bolometer file, typically used for initial
+                        debugging of new bolometers since it compares Cherab to known chord positions
         """
 
         # --- Make sure self.info is initiated
@@ -476,10 +480,15 @@ class Tokamak(object):
             return
 
         # --- Loop over each bolometer, only plot those with the correct group name
+        label_cherab = True
         for bolo in self.bolometers:
             if bolo.info["GROUP_NAME"] == boloGroupName:
-
                 for foil in bolo.bolometer_camera:
+                    label = "__no_legend__"
+                    if label_cherab:
+                        label = "Chords from Raysect"
+                        label_cherab = False
+
                     slit_centre = foil.slit.centre_point
                     slit_centre_rz = point3d_to_rz(slit_centre)
                     ax.plot(slit_centre_rz[0], slit_centre_rz[1], "ko")
@@ -488,7 +497,12 @@ class Tokamak(object):
                     ax.plot(centre_rz[0], centre_rz[1], "kx")
                     origin_rz = point3d_to_rz(origin)
                     hit_rz = point3d_to_rz(hit)
-                    ax.plot([origin_rz[0], hit_rz[0]], [origin_rz[1], hit_rz[1]], "k")
+                    ax.plot(
+                        [origin_rz[0], hit_rz[0]],
+                        [origin_rz[1], hit_rz[1]],
+                        "k",
+                        label=label,
+                    )
                     ax.text(
                         hit_rz[0],
                         hit_rz[1],
@@ -498,6 +512,25 @@ class Tokamak(object):
                         va="center",
                         weight="bold",
                     )
+                # --- Over plot the chords in the
+                if plot_chord_info and bolo.info is not None:
+                    if "r0" in bolo.info:
+                        label_ = "Chords from config file"
+
+                        for ii in range(len(bolo.info["r0"])):
+                            # --- Check to see if the currnt plot already has the correct label
+                            _, labels = ax.get_legend_handles_labels()
+                            if "Chords from config file" in labels:
+                                label_ = "__no_legend__"
+
+                            ax.plot(
+                                [bolo.info["r0"][ii], bolo.info["rf"][ii]],
+                                [bolo.info["z0"][ii], bolo.info["zf"][ii]],
+                                linewidth=2.0,
+                                color="green",
+                                label=label_,
+                            )
+        ax.legend()
         ax.set_title(boloGroupName)
 
     def plot(self, fieldLineStartPhi=None) -> None:
