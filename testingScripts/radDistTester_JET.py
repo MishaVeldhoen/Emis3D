@@ -84,32 +84,20 @@ else:
 if True:
     num_rows = len(bolometerNames) + 1
     f = plt.figure(figsize=(15, 8))
+if hel.tokamak.info is not None:
+    boloGroups = hel.tokamak.info["Bolometer Groups"]
+    bolometers = hel.tokamak.bolometers
 
-    for ii, boloGroup in enumerate(bolometerNames):
-        f_top = f.add_subplot(2, num_rows, ii + 1)
-        tok._plot_first_wall(f_top)
-        for bolo in boloGroup:
-            indx_ = bolo_tokamak.index(bolo)
-            for foil in hel.tokamak.bolometers[indx_].bolometer_camera:  # type: ignore
-                slit_centre = foil.slit.centre_point
-                slit_centre_rz = point3d_to_rz(slit_centre)
-                f_top.plot(slit_centre_rz[0], slit_centre_rz[1], "ko")
-                origin, hit, _ = foil.trace_sightline()
-                centre_rz = point3d_to_rz(foil.centre_point)
-                f_top.plot(centre_rz[0], centre_rz[1], "kx")
-                origin_rz = point3d_to_rz(origin)
-                hit_rz = point3d_to_rz(hit)
-                f_top.plot([origin_rz[0], hit_rz[0]], [origin_rz[1], hit_rz[1]], "k")
-                f_top.text(
-                    hit_rz[0],
-                    hit_rz[1],
-                    str(int(foil.name[-2:])),
-                    fontsize="10",
-                    ha="center",
-                    va="center",
-                    weight="bold",
-                )
-        f_top.set_title(boloGroup[0].split("_")[0])
+    num_figs = len(boloGroups)
+    num_rows = int(np.ceil(num_figs / 4))  # no more than 4 across
+    f = plt.figure(figsize=(15, 8))
+    initilized = False
+
+    # --- Loop over each bolometer group
+    for ii, boloGroup in enumerate(boloGroups):
+        f_ = f.add_subplot(num_rows, int(num_figs / num_rows), ii + 1)
+        hel.tokamak._plot_first_wall(f_)
+        hel.tokamak._plot_bolometers(f_, boloGroupName=boloGroup)
         # --- Plot the radDist
         # Use the first bolometer in the group to get indx_
         indx_plot = bolo_tokamak.index(boloGroup[0])
@@ -119,7 +107,7 @@ if True:
                     hel.tokamak.bolometers[indx_plot].info["CAMERA_POSITION_R_Z_PHI"][2]
                 )
             ),
-            ax=f_top,
+            ax=f_,
         )
 
     # --- Plot SPI injection location

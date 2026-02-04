@@ -16,13 +16,8 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import matplotlib.pyplot as plt
 import numpy as np
-from raysect.core import Point2D
 
 from main.Tokamak import Tokamak
-
-
-def point3d_to_rz(point):
-    return Point2D(np.hypot(point.x, point.y), point.z)
 
 
 t = Tokamak(
