@@ -23,5 +23,5 @@ GRID:
   NumZStartGrid: 1 # Number of points in the z grid, 20 is usually sufficient
 
 BOLOMETER_PROPS:
-  pixelSamples: 5000 # Resolution of the observed chord in Cherab
+  pixelSamples: 500 # Resolution of the observed chord in Cherab, 5000 is a decent number but it is lowered in this example
   numProcessors: 1 # Number of processors to use while observing the world in Cherab

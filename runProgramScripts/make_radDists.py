@@ -87,7 +87,7 @@ if __name__ == "__main__":
 
     # --- Load the tokamak if rArray and zArray are blank in the configuration file
     if len(config["GRID"]["rLimits"]) == 0 or len(config["GRID"]["zLimits"]) == 0:
-        # --- Need to load the tokamak to get wall information
+        # --- Need to load the tokamak to get wall information, this tokamak class will not be passed to the radDists
         tok = Tokamak(
             tokamakName=tokamakName,
             mode="Analysis",

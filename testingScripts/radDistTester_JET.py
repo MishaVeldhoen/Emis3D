@@ -1,10 +1,10 @@
-# radDistTester_DIII-D.py
+# radDistTester_JET.py
 """
 This program will group similar SXR arrays, then plot out
 the chords, radDist contour plot, and the observed radiation
 below.
 
-It is currently specific to DIII-D
+It is currently specific to JET
 """
 
 import os
@@ -19,12 +19,12 @@ from main.Globals import *
 from main.Tokamak import Tokamak
 from main.Util import config_loader
 
-tokamakName = "DIII-D"
+tokamakName = "JET"
 configFileName = "elongatedRing_config.yaml"  # "helical_config.yaml"  #
-elongation = 0.1
-polSigma = 0.1
+elongation = 0.2
+polSigma = 0.2
 rotationAngle = 0.0
-rzvalues = [1.65, 0.0]
+rzvalues = [2.84, 0.5]
 
 
 # --- Create the radDist using only one point, we don't need to loop over everything
@@ -72,5 +72,4 @@ elif config["distType"] == "ElongatedRing":
 else:
     raise RuntimeError("Please have 'elongatedRing' or 'helical' in the configFileName")
 
-# --- Plot everything ---
 rD.plotOverview()

@@ -10,7 +10,6 @@ Updated and re-written during the refactor - JLH
 """
 
 import os
-from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -22,7 +21,7 @@ from raysect.optical import World
 from raysect.optical.library import RoughTungsten
 from raysect.optical import AbsorbingSurface  # type: ignore
 
-from raysect.primitive import Box, Cylinder, import_stl
+from raysect.primitive import Cylinder, import_stl, Subtract
 
 from main.Diagnostic import Bolometer
 from main.Fieldline_Tracer import Fieldline_Tracer
@@ -52,7 +51,7 @@ class Tokamak(object):
         Basic tokamak class which loads information specific to the TokamakName.
 
         This class loads the configuration file for the tokamak within
-        ../tokamaks/{DIII-D, SPARC, etc}/{DIII-D, SPARC, etc}_settings.yaml
+        ../tokamaks/{DIII-D, JET, SPARC, etc}/{DIII-D, JET, SPARC, etc}_settings.yaml
 
         The file should contain information about the SXR/bolometer arrays,
         wall file location, volume, majorRadius, minorRadius, etc.
@@ -65,6 +64,7 @@ class Tokamak(object):
         eqFileName  :: The name of the equilibrium file to be used
         loadBolometers    :: Set to True to load the bolometers (needed to make radDists)
         """
+
         self.verbose = verbose
         if tokamakName not in SUPPORTED_TOKAMAKS:
             print(f"Please eneter a valid tokamak name!")
@@ -81,11 +81,7 @@ class Tokamak(object):
             )
 
             # --- Run the startup program
-            self._tokamak_startup()
-
-            # --- Load the bolometers
-            if loadBolometers:
-                self._load_bolometers()
+            self._tokamak_startup(loadBolometers=loadBolometers)
 
     def _load_config_file(self, tokamakName, mode, reflections, eqFileName) -> None:
         """
@@ -118,25 +114,34 @@ class Tokamak(object):
         self.info["reflections"] = reflections
         self.info["eqFileName"] = eqFileName
 
-    def _tokamak_startup(self) -> None:
+    def _tokamak_startup(self, loadBolometers=False) -> None:
         """
         This definition will:
         1. Load the equilibrium file, if given
-        1. Load the wall file, defaults to what is in the equilibrium file
-        3. Builds the tokamak (if mode = Build)
-        4. Load the bolometers
+        2. Load the bolometers
+        3. Load the wall file, defaults to what is in the equilibrium file
+        4. Builds the tokamak (if mode = Build)
         """
 
         if self.info is None:
             print("No tokamak information loaded, cannot continue!")
             return
 
+        # --- Create the raysect world
+        self.world = World()
+
         # --- Load the equilibrium file
         if self.info["eqFileName"] is not None:
             self._load_eqFile()
 
+        # --- Load the bolometers
+        if loadBolometers:
+            self._load_bolometers()
+
+        # --- Load the first wall
         self._load_first_wall()
-        self.world = World()
+
+        # --- Create boundries in the raysect world
         if self.info["mode"].upper() == "BUILD":
             self._build_tokamak()
 
@@ -223,42 +228,78 @@ class Tokamak(object):
             return
 
         # Building a closed universe
-
         if hasattr(self, "wall") and load_stl == False:
             if self.wall is not None:
+                # --- Find the z limits
+                if "Bolometer Z Limits" in self.info:
+                    minz = np.min(
+                        [self.wall["minz"], self.info["Bolometer Z Limits"][0]]
+                    ).astype(float)
+                    maxz = np.max(
+                        [self.wall["maxz"], self.info["Bolometer Z Limits"][1]]
+                    ).astype(float)
+                else:
+                    minz = self.wall["minz"]
+                    maxz = self.wall["maxz"]
+                height = np.abs(maxz) + np.abs(minz)
+                offset = minz
+
+                # --- Find the R limits
+                if "Bolometer R Limits" in self.info:
+                    minR = np.min(
+                        [self.wall["minr"], self.info["Bolometer R Limits"][0]]
+                    ).astype(float)
+                    maxR = np.max(
+                        [self.wall["maxr"], self.info["Bolometer R Limits"][1]]
+                    ).astype(float)
+                else:
+                    minR = self.wall["minr"]
+                    maxR = self.wall["maxr"]
+
                 # --- Outer wall
-                Cylinder(
-                    radius=self.wall["maxr"] + 0.1,
-                    height=self.wall["maxz"] * 3.0,
-                    material=AbsorbingSurface(),
+                cylinder_outer = Cylinder(
+                    radius=maxR + 0.2,
+                    height=height + 0.2,
                     name="Outer wall",
-                    parent=self.world,
-                    transform=translate(0, 0, (-1) * (self.wall["maxz"] * 3.0) / 2.0),
-                )
-                # Inner wall
-                Cylinder(
-                    radius=self.wall["minr"],
-                    height=self.wall["maxz"] * 3.0,
-                    material=AbsorbingSurface(),
-                    name="Inner wall",
-                    parent=self.world,
-                    transform=translate(0, 0, (-1) * (self.wall["maxz"] * 3.0) / 2.0),
                 )
 
-                # Top and bottom of tokamak
-                Box(
-                    lower=Point3D(-10, -10, self.wall["maxz"] - 0.1),
-                    upper=Point3D(10, 10, self.wall["maxz"]),
-                    parent=self.world,
-                    material=AbsorbingSurface(),
-                    name="Top of machine",
+                # --- Inner wall
+                cylinder_inner = Cylinder(
+                    radius=minR - 0.2,
+                    height=height + 0.2,
+                    name="Inner wall",
                 )
-                Box(
-                    lower=Point3D(-10, -10, self.wall["minz"] - 0.1),
-                    upper=Point3D(10, 10, self.wall["minz"]),
-                    parent=self.world,
+
+                wall = Subtract(
+                    cylinder_outer,
+                    cylinder_inner,
                     material=AbsorbingSurface(),
-                    name="Bottom of machine",
+                    name="Tokamak Wall",
+                    parent=self.world,
+                    transform=translate(0, 0, offset - 0.1),
+                )
+
+                # --- Have the emission surface inside the tokamak
+                # --- Outer wall
+                emiss_outer = Cylinder(
+                    radius=self.wall["maxr"],
+                    height=height,
+                    name="Outer wall",
+                )
+
+                # --- Inner wall
+                emiss_inner = Cylinder(
+                    radius=self.wall["minr"],
+                    height=height,
+                    name="Inner wall",
+                )
+
+                emiss_surface = Subtract(
+                    emiss_outer,
+                    emiss_inner,
+                    name="Emission Surface",
+                    parent=self.world,
+                    transform=translate(0, 0, offset),
                 )
 
         # --- Load the CAD file
@@ -270,7 +311,9 @@ class Tokamak(object):
                     STL_SCALE = 1.0e-3
 
                 PFC_STL_PATH = os.path.join(
-                    self.input_dir, "CAD_stl_files", "d3d_CAD_full.stl"
+                    self.input_dir,
+                    "CAD_stl_files",
+                    self.info["MACHINE"]["PFC_STL_PATH"],
                 )
                 if os.path.isfile(PFC_STL_PATH):
                     pfcs = import_stl(PFC_STL_PATH, scaling=STL_SCALE)
@@ -303,10 +346,18 @@ class Tokamak(object):
 
         """
         self.bolometers = []
+
         if self.info is None:
             print("No tokamak information loaded, cannot continue!")
             return
+        # --- Store all of the bolometer groups, used to make plotting easier
+        self.info["Bolometer Groups"] = []
 
+        # --- Find the maximum and minimum locations of the bolometer, used to create the world
+        r_limits = [1000, 0]
+        z_limits = [1000, -1000]
+
+        # --- Create each bolometer in the tokamak configuration file
         for bolo in self.info["BOLOMETERS"]:
             b_ = Bolometer(
                 world=self.world,
@@ -314,6 +365,37 @@ class Tokamak(object):
                 configFileName=self.info["BOLOMETERS"][bolo]["configFileName"],
             )
             self.bolometers.append(b_)
+
+            if b_.info is not None:
+                offset = np.abs(b_.info["SLIT_SENSOR_SEPARATION"])
+                if b_.info["CAMERA_POSITION_R_Z_PHI"][0] + offset > r_limits[1]:
+                    r_limits[1] = b_.info["CAMERA_POSITION_R_Z_PHI"][0] + offset
+                if b_.info["CAMERA_POSITION_R_Z_PHI"][0] - offset < r_limits[0]:
+                    r_limits[0] = b_.info["CAMERA_POSITION_R_Z_PHI"][0] - offset
+                if b_.info["CAMERA_POSITION_R_Z_PHI"][1] + offset > z_limits[1]:
+                    z_limits[1] = b_.info["CAMERA_POSITION_R_Z_PHI"][1] + offset
+                if b_.info["CAMERA_POSITION_R_Z_PHI"][1] - offset < z_limits[0]:
+                    z_limits[0] = b_.info["CAMERA_POSITION_R_Z_PHI"][1] - offset
+
+                if b_.info["GROUP_NAME"] not in self.info["Bolometer Groups"]:
+                    self.info["Bolometer Groups"].append(b_.info["GROUP_NAME"])
+
+        # --- Used to create the cherab bounding box for the bolometers
+        self.info["Bolometer R Limits"] = r_limits
+        self.info["Bolometer Z Limits"] = z_limits
+
+    def _inside_tokamak(self, points) -> bool:
+        """
+        Checks to see if the np.column_stacked R, z points are within the tokamak wall
+        """
+        if self.wall is None:
+            raise RuntimeError(
+                "Tokamak wall is not initialized. Ensure that the wall attribute is set before calling inside_tokamak()."
+            )
+
+        wallcurve = self.wall["wallcurve"]
+
+        return wallcurve.contains_points(points)
 
     def _plot_first_wall(self, ax=None) -> None:
         """
@@ -401,37 +483,102 @@ class Tokamak(object):
                 lw=2,
             )
 
-    def _plot_bolometers(self, ax, boloName) -> None:
+    def _plot_bolometers(self, ax, boloGroupName, plot_chord_info=False) -> None:
         """
-        Plots the chords for a specific bolometer
+        Plots the chords for a specific bolometer group
+        ax :: matplotlib.plot
+        boloGroupName :: The GROUP_NAME in each bolometer file
+        plot_chord_info :: Plot r0, rf, etc. in each bolometer file, typically used for initial
+                        debugging of new bolometers since it compares Cherab to known chord positions
         """
 
-        # --- Find the correct index
-        bolo_tokamak = []
+        # --- Make sure self.info is initiated
+        if self.info is None:
+            print("No tokamak information loaded, cannot continue!")
+            return
+
+        # --- Check to see if boloGroupName is in self.info['Bolometer Groups']
+        if boloGroupName not in self.info["Bolometer Groups"]:
+            print(f"{boloGroupName} is not found in self.info['Bolometer Groups']")
+            return
+
+        # --- Loop over each bolometer, only plot those with the correct group name
+        label_cherab = True
         for bolo in self.bolometers:
-            bolo_tokamak.append(bolo.name)
+            if bolo.info["GROUP_NAME"] == boloGroupName:
+                for foil in bolo.bolometer_camera:
+                    label = "__no_legend__"
+                    if label_cherab:
+                        label = "Chords from Raysect"
+                        label_cherab = False
 
-        indx_ = bolo_tokamak.index(boloName)
-        for foil in self.bolometers[indx_].bolometer_camera:
-            slit_centre = foil.slit.centre_point
-            slit_centre_rz = point3d_to_rz(slit_centre)
-            ax.plot(slit_centre_rz[0], slit_centre_rz[1], "ko")
-            origin, hit, _ = foil.trace_sightline()
-            centre_rz = point3d_to_rz(foil.centre_point)
-            ax.plot(centre_rz[0], centre_rz[1], "kx")
-            origin_rz = point3d_to_rz(origin)
-            hit_rz = point3d_to_rz(hit)
-            ax.plot([origin_rz[0], hit_rz[0]], [origin_rz[1], hit_rz[1]], "k")
-            ax.text(
-                hit_rz[0],
-                hit_rz[1],
-                int(foil.name[-2:]),
-                fontsize="10",
-                ha="center",
-                va="center",
-                weight="bold",
-            )
-            ax.set_title(boloName)
+                    slit_centre = foil.slit.centre_point
+                    slit_centre_rz = point3d_to_rz(slit_centre)
+                    ax.plot(slit_centre_rz[0], slit_centre_rz[1], "ko")
+                    origin, hit, _ = foil.trace_sightline()
+                    centre_rz = point3d_to_rz(foil.centre_point)
+                    ax.plot(centre_rz[0], centre_rz[1], "kx")
+                    origin_rz = point3d_to_rz(origin)
+                    hit_rz = point3d_to_rz(hit)
+                    ax.plot(
+                        [origin_rz[0], hit_rz[0]],
+                        [origin_rz[1], hit_rz[1]],
+                        "k",
+                        label=label,
+                    )
+                    ax.text(
+                        hit_rz[0],
+                        hit_rz[1],
+                        int(foil.name[-2:]),
+                        fontsize="10",
+                        ha="center",
+                        va="center",
+                        weight="bold",
+                    )
+                # --- Over plot the chords in the
+                if plot_chord_info and bolo.info is not None:
+                    if "r0" in bolo.info:
+                        label_ = "Chords from config file"
+
+                        for ii in range(len(bolo.info["r0"])):
+                            # --- Check to see if the currnt plot already has the correct label
+                            _, labels = ax.get_legend_handles_labels()
+                            if "Chords from config file" in labels:
+                                label_ = "__no_legend__"
+
+                            ax.plot(
+                                [bolo.info["r0"][ii], bolo.info["rf"][ii]],
+                                [bolo.info["z0"][ii], bolo.info["zf"][ii]],
+                                linewidth=2.0,
+                                color="green",
+                                label=label_,
+                            )
+        ax.legend(loc="upper right")
+        ax.set_title(boloGroupName)
+
+    def get_ave_bolometer_tor_loc(self, boloGroupName):
+        """
+        Returns the average toroidal angle of the bolometer group
+        """
+
+        phi = []
+
+        # --- Make sure self.info is initiated
+        if self.info is None:
+            print("No tokamak information loaded, cannot continue!")
+            return None
+
+        # --- Check to see if boloGroupName is in self.info['Bolometer Groups']
+        if boloGroupName not in self.info["Bolometer Groups"]:
+            print(f"{boloGroupName} is not found in self.info['Bolometer Groups']")
+            return None
+
+        # --- Loop over each bolometer, only plot add with the correct group name
+        for bolo in self.bolometers:
+            if bolo.info["GROUP_NAME"] == boloGroupName:
+                phi.append(bolo.info["CAMERA_POSITION_R_Z_PHI"][2])
+
+        return np.mean(np.array(phi))
 
     def plot(self, fieldLineStartPhi=None) -> None:
         """
@@ -557,14 +704,14 @@ class Tokamak(object):
         self.fieldLines[startPhideg]["startPhi"] = startPhi
 
         # --- Loop over the direction
-        direction_prefix = ["counterClock", "clockwise"]
+        direction_prefix_ = ["counterClock", "clockwise"]
         numTrans = [numTransists, (-1.0) * numTransists]
-        for ii, direction_prefix in enumerate(direction_prefix):
+        for ii, direction_prefix in enumerate(direction_prefix_):
             # --- Loop over the R, z coordinates, store the result
             for jj in range(len(startR)):
                 if self.verbose:
                     print(
-                        f"Calculating fields in the {direction_prefix[ii]} direction from\tR={startR[jj]:.2f}m, z={startZ[jj]:.2f}m"
+                        f"Calculating fields in the {direction_prefix} direction from\tR={startR[jj]:.2f}m, z={startZ[jj]:.2f}m"
                     )
                 tracer = Fieldline_Tracer(
                     StartR=startR[jj],
