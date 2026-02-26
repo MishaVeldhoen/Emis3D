@@ -23,10 +23,11 @@ t = Tokamak(
 )
 
 
+"""
 # Plot in 3D to see if it is at the correct toroidal location
 if True:
     t.plot()
-
+"""
 # --- Plot each individual bolometer
 if t.info is not None:
     boloGroups = t.info["Bolometer Groups"]

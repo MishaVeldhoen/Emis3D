@@ -43,6 +43,13 @@ tok = Tokamak(
     verbose=True,
 )
 
+
+for bolo in tok.bolometers:
+    for foil in bolo.bolometer_camera:
+        print(f"\n----->{foil.name}<-----")
+        print(f"Slit width: {foil.slit.dx:.4f} m")
+        print(f"Slit height: {foil.slit.dy:.4f} m")
+
 rzArray = Util_radDist.callRZGridTokamak(
     tok,
     numRgrid=config["GRID"]["NumRStartGrid"],

@@ -5,6 +5,8 @@ Created on Fri Jun 11 13:12:06 2021
 @author: bemst
 
 Re-organized pretty much everything, added parallelization, and a lot more during the refactor -JLH Aug., 2025
+
+TODO: Move _make_raysect_surface_transparent to the tokamak class.
 """
 
 import os
