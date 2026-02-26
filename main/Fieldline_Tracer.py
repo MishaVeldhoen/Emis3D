@@ -108,6 +108,7 @@ class Fieldline_Tracer:
         dphi = phi[1] - phi[0]
 
         # initialize this x, this y, this z, and this phi
+
         tX = float(startR) * np.cos(float(startPhi))
         tY = float(startR) * np.sin(float(startPhi))
         tZ = float(startZ)
@@ -123,8 +124,9 @@ class Fieldline_Tracer:
             self.data["z"][i] = tZ
             self.data["R"][i] = tR
 
-            tBR = brI(tR, tZ).T
-            tBZ = bzI(tR, tZ).T
+            tBR = brI(tR, tZ).T.item()
+            tBZ = bzI(tR, tZ).T.item()
+
             tBphi = self.bcentr * self.Rmagx / tR
 
             dR = tBR / tBphi * dphi * tR

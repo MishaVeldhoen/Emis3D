@@ -19,7 +19,7 @@ from raysect.core import Point3D
 from raysect.core.math import rotate_z, translate
 from raysect.optical import World
 from raysect.optical.library import RoughTungsten
-from raysect.optical import AbsorbingSurface  # type: ignore
+from raysect.optical import AbsorbingSurface, NullMaterial  # type: ignore
 
 from raysect.primitive import Cylinder, import_stl, Subtract
 
@@ -259,14 +259,14 @@ class Tokamak(object):
                 # --- Outer wall
                 cylinder_outer = Cylinder(
                     radius=maxR + 0.2,
-                    height=height + 0.2,
+                    height=height + 1.0,
                     name="Outer wall",
                 )
 
                 # --- Inner wall
                 cylinder_inner = Cylinder(
                     radius=minR - 0.2,
-                    height=height + 0.2,
+                    height=height + 1.0,
                     name="Inner wall",
                 )
 
@@ -300,6 +300,7 @@ class Tokamak(object):
                     name="Emission Surface",
                     parent=self.world,
                     transform=translate(0, 0, offset),
+                    material=NullMaterial(),
                 )
 
         # --- Load the CAD file
@@ -483,7 +484,9 @@ class Tokamak(object):
                 lw=2,
             )
 
-    def _plot_bolometers(self, ax, boloGroupName, plot_chord_info=False) -> None:
+    def _plot_bolometers(
+        self, ax, boloGroupName, plot_chord_info=False, color="black", linewidth=1.0
+    ) -> None:
         """
         Plots the chords for a specific bolometer group
         ax :: matplotlib.plot
@@ -523,19 +526,29 @@ class Tokamak(object):
                     ax.plot(
                         [origin_rz[0], hit_rz[0]],
                         [origin_rz[1], hit_rz[1]],
-                        "k",
+                        color=color,
+                        linewidth=linewidth,
                         label=label,
                     )
+                    ch = ""
+                    try:
+                        if int(foil.name[-2:]):
+                            ch = int(foil.name[-2:])
+                    # For JET foils
+                    except Exception:
+                        n = foil.name.split("_")[1]
+                        ch = n[2:]
+
                     ax.text(
                         hit_rz[0],
                         hit_rz[1],
-                        int(foil.name[-2:]),
+                        ch,
                         fontsize="10",
                         ha="center",
                         va="center",
                         weight="bold",
                     )
-                # --- Over plot the chords in the
+                # --- Over plot the chords in the cofig file
                 if plot_chord_info and bolo.info is not None:
                     if "r0" in bolo.info:
                         label_ = "Chords from config file"
@@ -616,25 +629,30 @@ class Tokamak(object):
                     f"Building the tokamak! We need this to trace the chords for the bolometers"
                 )
                 self._build_tokamak()
-
-            for bolo in self.bolometers:
-                for foil in bolo.bolometer_camera:
-                    slit_centre = foil.slit.centre_point
-                    ax.plot(slit_centre[0], slit_centre[1], slit_centre[2], "ko")
-                    origin, hit, _ = foil.trace_sightline()
-                    ax.plot(
-                        foil.centre_point[0],
-                        foil.centre_point[1],
-                        foil.centre_point[2],
-                        "kx",
-                    )
-                    ax.plot(
-                        [origin[0], hit[0]],
-                        [origin[1], hit[1]],
-                        [origin[2], hit[2]],
-                        "k",
-                    )
-                    ax.text(hit[0], hit[1], hit[2], foil.name)
+            try:
+                for bolo in self.bolometers:
+                    for foil in bolo.bolometer_camera:
+                        slit_centre = foil.slit.centre_point
+                        ax.plot(slit_centre[0], slit_centre[1], slit_centre[2], "ko")
+                        origin, hit, _ = foil.trace_sightline()
+                        ax.plot(
+                            foil.centre_point[0],
+                            foil.centre_point[1],
+                            foil.centre_point[2],
+                            "kx",
+                        )
+                        ax.plot(
+                            [origin[0], hit[0]],
+                            [origin[1], hit[1]],
+                            [origin[2], hit[2]],
+                            "k",
+                        )
+                        ax.text(hit[0], hit[1], hit[2], foil.name)
+            except Exception as e:
+                print(f"Could not plot the bolometer chords, error: {e}")
+                print(
+                    f"Ensure that the tokamak is built before plotting the bolometers, currently in mode: {self.info['mode']}"
+                )
 
         # --- Plot the given field line
         if hasattr(self, "fieldLines"):
@@ -803,14 +821,14 @@ class Tokamak(object):
         lines_lower = {}
 
         for angle in np.arange(0, 360, dtheta):
-            lines[angle] = draw_radial_lines(r0, z0, R=1.5, angle_deg=angle)
+            lines[angle] = draw_radial_lines(r0, z0, R=1.5, angle_deg=float(angle))
 
             lines_upper[angle] = draw_radial_lines(
-                r0, z0, R=1.5, angle_deg=angle, initial_offset=dtheta_camera
+                r0, z0, R=1.5, angle_deg=float(angle), initial_offset=dtheta_camera
             )
             lines_upper[angle]["offset"] = dtheta_camera
             lines_lower[angle] = draw_radial_lines(
-                r0, z0, R=1.5, angle_deg=angle, initial_offset=-dtheta_camera
+                r0, z0, R=1.5, angle_deg=float(angle), initial_offset=-dtheta_camera
             )
             lines_lower[angle]["offset"] = -dtheta_camera
 
