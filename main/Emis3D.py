@@ -66,6 +66,7 @@ Biggest Issues:
     - Add a tomography radDist mapping function (like BOLT?)
 2. Implement a toroidal distribution function that is not symmetric around the injection loction
 3. Re-vist how error is calculated for the observed data
+4. Remove flammkuchen dependency
 
 """
 

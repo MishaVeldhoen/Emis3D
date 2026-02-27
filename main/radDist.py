@@ -493,7 +493,7 @@ class RadDist(ABC):
                 weight="bold",
             )
 
-    def plotOverview(self, return_figure=False):
+    def plotOverview(self, return_figure=False, plot_etendue=[]):
         """
         Plots the bolometer chords with a contour overplot of the radDist in the top row
         Plots the observed emissivities in the bottom row
@@ -525,7 +525,12 @@ class RadDist(ABC):
                 plot_count += 1
                 f_ = f.add_subplot(num_rows, num_columns, plot_count)
                 tok._plot_first_wall(f_)
-                tok._plot_bolometers(f_, boloGroupName=boloGroup, plot_chord_info=True)
+                tok._plot_bolometers(
+                    f_,
+                    boloGroupName=boloGroup,
+                    plot_chord_info=True,
+                    plot_etendue=plot_etendue,
+                )
 
                 # --- Plot a cross-section of the radDist
                 phi = tok.get_ave_bolometer_tor_loc(boloGroupName=boloGroup)

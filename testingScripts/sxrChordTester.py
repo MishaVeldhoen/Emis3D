@@ -22,6 +22,7 @@ t = Tokamak(
     loadBolometers=True,
 )
 
+plt.ion()
 
 """
 # Plot in 3D to see if it is at the correct toroidal location
@@ -42,7 +43,9 @@ if t.info is not None:
     for ii, boloGroup in enumerate(boloGroups):
         f_ = f.add_subplot(num_rows, int(num_figs / num_rows), ii + 1)
         t._plot_first_wall(f_)
-        t._plot_bolometers(f_, boloGroupName=boloGroup, plot_chord_info=True)
+        t._plot_bolometers(
+            f_, boloGroupName=boloGroup, plot_chord_info=True, plot_etendue=["SX45F07"]
+        )
 
     plt.tight_layout()
     plt.show()
