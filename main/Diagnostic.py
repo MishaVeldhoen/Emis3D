@@ -18,8 +18,13 @@ import os
 
 import numpy as np
 from cherab.tools.observers import BolometerCamera, BolometerFoil, BolometerSlit
-from numpy import deg2rad
-from raysect.core import AffineMatrix3D, Node, Point3D, Vector3D, translate
+from raysect.core import (
+    AffineMatrix3D,
+    Node,
+    Point3D,
+    Vector3D,
+    translate,
+)
 
 from main.Globals import *
 from main.Util import RPhi_To_XY, config_loader, rotate_vector
@@ -146,21 +151,18 @@ class Bolometer(object):
         SLIT_SENSOR_SEPARATION = self.info["SLIT_SENSOR_SEPARATION"]
         FOIL_SEPARATION = self.info["FOIL_SEPARATION"]
         CAMERA_POSITION_R_Z_PHI = self.info["CAMERA_POSITION_R_Z_PHI"]
-        CAMERA_PHI_RAD = deg2rad(CAMERA_POSITION_R_Z_PHI[2])
+        CAMERA_PHI_RAD = np.deg2rad(CAMERA_POSITION_R_Z_PHI[2])
         x, y = RPhi_To_XY(CAMERA_POSITION_R_Z_PHI[0], CAMERA_PHI_RAD)
         CAMERA_POSITION_X_Y_Z = (x, y, CAMERA_POSITION_R_Z_PHI[1])
 
-        # Instance of the bolometer camera
+        # --- Instance of the bolometer camera, set camera_geometry to None, add it later
         bolometer_camera = BolometerCamera(
             camera_geometry=None, parent=self.world, name=self.info["NAME"]
         )
-        # Set camera_geometry to None, otherwise it would clip neighboring chords
 
-        # The bolometer slit in this instance just contains targeting information
-        # for the ray tracing, since we have already given our camera a geometry
-        # The slit is defined in the local coordinate system of the camera
+        # --- Create a slit at the camera origin
         slit = BolometerSlit(
-            slit_id="Example slit",
+            slit_id=f"{self.info['NAME']} slit",
             centre_point=ORIGIN,
             basis_x=XAXIS,
             dx=SLIT_WIDTH,
@@ -169,17 +171,14 @@ class Bolometer(object):
             parent=bolometer_camera,
         )
 
-        # x bolometer foils, spaced at equal intervals along the local X axis
-        # The bolometer positions and orientations are given in the local coordinate
-        # system of the camera, just like the slit. All 4 foils are on a single
-        # sensor, so we define them relative to this sensor
+        # --- Create the sensor node behind the slit
         sensor = Node(
-            name="Bolometer sensor",
+            name=f"{self.info['NAME']} sensor",
             parent=bolometer_camera,
             transform=translate(0, 0, -SLIT_SENSOR_SEPARATION),
         )
-        # The foils are shifted relative to the centre of the sensor by -1.5, -0.5, 0.5 and 1.5
-        # times the foil-foil separation
+
+        # --- Create the foils relative to the sensor
         for ii, shift in enumerate(self.info["FOIL_POSITIONS"]):
             foil_transform = translate(shift * FOIL_SEPARATION, 0, 0) * sensor.transform
             foil = BolometerFoil(
@@ -191,19 +190,17 @@ class Bolometer(object):
                 dy=FOIL_HEIGHT,
                 slit=slit,
                 parent=bolometer_camera,
-                units="Power",
                 accumulate=False,
                 curvature_radius=FOIL_CORNER_CURVATURE,
             )
+
             bolometer_camera.add_foil_detector(foil)
 
         # --- Translate the camera to the correct position
-        origin_xyz = Vector3D(
-            CAMERA_POSITION_X_Y_Z[0], CAMERA_POSITION_X_Y_Z[1], CAMERA_POSITION_X_Y_Z[2]
-        )
-        sign = 1
-        if self.info["CAMERA_DOWNWARD_FACING"]:
-            sign = -1
+        origin_xyz = Vector3D(*CAMERA_POSITION_X_Y_Z)
+
+        # --- Tilt the camera downward if it is downward facing
+        sign = -1 if self.info["CAMERA_DOWNWARD_FACING"] else 1
         tilt_rad = sign * np.deg2rad(self.info["CAMERA_ROTATION"])
 
         e_R = Vector3D(np.cos(CAMERA_PHI_RAD), np.sin(CAMERA_PHI_RAD), 0).normalise()
@@ -211,14 +208,17 @@ class Bolometer(object):
         e_phi = e_z.cross(e_R).normalise()
 
         # Rotate e_z in R–z plane
-        view_dir = rotate_vector(e_z, e_phi, tilt_rad)
+        view_dir = rotate_vector(e_z, e_phi, tilt_rad).normalise()
 
         # Build orthonormal basis
         z_axis = view_dir  # Camera z-axis: the direction the camera "looks"
         y_axis = e_phi  # Camera y-axis: e_phi (toroidal direction)
-        x_axis = y_axis.cross(
-            z_axis
-        ).normalise()  # Camera x-axis: y × z to form right-handed coordinate system
+        # Camera x-axis: y × z to form right-handed coordinate system
+        x_axis = y_axis.cross(z_axis).normalise()
+
+        # x_axis = y_axis.cross(z_axis).normalise()
+        # --- Force orthogonality for safety
+        y_axis = z_axis.cross(x_axis).normalise()
 
         # Build full rotation matrix from orthonormal basis
         basis_matrix = AffineMatrix3D(

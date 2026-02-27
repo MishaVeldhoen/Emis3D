@@ -62,6 +62,7 @@ aperture = Box(
 )
 camera_box = Subtract(camera_box, aperture)
 camera_box.material = AbsorbingSurface()
+
 # Instance of the bolometer camera
 bolometer_camera = BolometerCamera(
     camera_geometry=camera_box, parent=world, name="Demo camera"

@@ -259,21 +259,21 @@ class Tokamak(object):
                 # --- Outer wall
                 cylinder_outer = Cylinder(
                     radius=maxR + 0.2,
-                    height=height + 1.0,
+                    height=height + 0.2,
                     name="Outer wall",
                 )
 
                 # --- Inner wall
                 cylinder_inner = Cylinder(
                     radius=minR - 0.2,
-                    height=height + 1.0,
+                    height=height + 0.2,
                     name="Inner wall",
                 )
 
                 wall = Subtract(
                     cylinder_outer,
                     cylinder_inner,
-                    material=AbsorbingSurface(),
+                    material=AbsorbingSurface(),  # Do NOT CHANGE THIS to a NullSurface, otherwise the foil.observe will not work properly
                     name="Tokamak Wall",
                     parent=self.world,
                     transform=translate(0, 0, offset - 0.1),
@@ -282,7 +282,7 @@ class Tokamak(object):
                 # --- Have the emission surface inside the tokamak
                 # --- Outer wall
                 emiss_outer = Cylinder(
-                    radius=self.wall["maxr"],
+                    radius=self.wall["maxr"] + 1.0,
                     height=height,
                     name="Outer wall",
                 )
@@ -300,7 +300,7 @@ class Tokamak(object):
                     name="Emission Surface",
                     parent=self.world,
                     transform=translate(0, 0, offset),
-                    material=NullMaterial(),
+                    material=AbsorbingSurface(),
                 )
 
         # --- Load the CAD file
@@ -398,6 +398,28 @@ class Tokamak(object):
 
         return wallcurve.contains_points(points)
 
+    def _make_raysect_surface_transparent(self, surfaceName="") -> None:
+        """
+        Makes the raysect object transparent. This is done after observation in order
+        for the sightlines to trace properly
+        """
+        # --- Add the emitter to the tokamak wall
+        for val in self.world.children:
+            if val.name == surfaceName:
+                val.material = NullMaterial()
+
+    def _change_emission_surface_material(self, material) -> None:
+        """
+        Changes the material of the emission surface, used for testing purposes
+        """
+        if self.info is None:
+            print("No tokamak information loaded, cannot continue!")
+            return
+
+        for child in self.world.children:
+            if child.name == "Emission Surface":
+                child.material = material
+
     def _plot_first_wall(self, ax=None) -> None:
         """
         Plots the first wall from self.wall["wallcurve"].
@@ -485,7 +507,10 @@ class Tokamak(object):
             )
 
     def _plot_bolometers(
-        self, ax, boloGroupName, plot_chord_info=False, color="black", linewidth=1.0
+        self,
+        ax,
+        boloGroupName,
+        plot_chord_info=False,
     ) -> None:
         """
         Plots the chords for a specific bolometer group
@@ -494,6 +519,9 @@ class Tokamak(object):
         plot_chord_info :: Plot r0, rf, etc. in each bolometer file, typically used for initial
                         debugging of new bolometers since it compares Cherab to known chord positions
         """
+
+        # --- Change the inner wall to an absorbing surface, so the chords have something intersect with
+        self._change_emission_surface_material(AbsorbingSurface())
 
         # --- Make sure self.info is initiated
         if self.info is None:
@@ -509,45 +537,7 @@ class Tokamak(object):
         label_cherab = True
         for bolo in self.bolometers:
             if bolo.info["GROUP_NAME"] == boloGroupName:
-                for foil in bolo.bolometer_camera:
-                    label = "__no_legend__"
-                    if label_cherab:
-                        label = "Chords from Raysect"
-                        label_cherab = False
 
-                    slit_centre = foil.slit.centre_point
-                    slit_centre_rz = point3d_to_rz(slit_centre)
-                    ax.plot(slit_centre_rz[0], slit_centre_rz[1], "ko")
-                    origin, hit, _ = foil.trace_sightline()
-                    centre_rz = point3d_to_rz(foil.centre_point)
-                    ax.plot(centre_rz[0], centre_rz[1], "kx")
-                    origin_rz = point3d_to_rz(origin)
-                    hit_rz = point3d_to_rz(hit)
-                    ax.plot(
-                        [origin_rz[0], hit_rz[0]],
-                        [origin_rz[1], hit_rz[1]],
-                        color=color,
-                        linewidth=linewidth,
-                        label=label,
-                    )
-                    ch = ""
-                    try:
-                        if int(foil.name[-2:]):
-                            ch = int(foil.name[-2:])
-                    # For JET foils
-                    except Exception:
-                        n = foil.name.split("_")[1]
-                        ch = n[2:]
-
-                    ax.text(
-                        hit_rz[0],
-                        hit_rz[1],
-                        ch,
-                        fontsize="10",
-                        ha="center",
-                        va="center",
-                        weight="bold",
-                    )
                 # --- Over plot the chords in the cofig file
                 if plot_chord_info and bolo.info is not None:
                     if "r0" in bolo.info:
@@ -566,6 +556,78 @@ class Tokamak(object):
                                 color="green",
                                 label=label_,
                             )
+
+                for foil in bolo.bolometer_camera.foil_detectors:
+                    if True:
+                        label = "__no_legend__"
+                        if label_cherab:
+                            label = "Chords from Raysect"
+                            label_cherab = False
+
+                        # --- Slit center
+                        slit_rz = point3d_to_rz(foil.slit.centre_point)
+                        ax.plot(slit_rz[0], slit_rz[1], "ko")
+
+                        # --- Foil center
+                        centre_rz = point3d_to_rz(foil.centre_point)
+                        ax.plot(centre_rz[0], centre_rz[1], "kx")
+
+                        # --- Ray-traced sightline
+                        origin, hit, _ = foil.trace_sightline()
+                        origin_rz = point3d_to_rz(origin)
+
+                        if origin is not None and hit is not None:
+                            origin_rz = point3d_to_rz(origin)
+                            hit_rz = point3d_to_rz(hit)
+
+                            ax.plot(
+                                [origin_rz[0], hit_rz[0]],
+                                [origin_rz[1], hit_rz[1]],
+                                color="tab:blue",
+                                linewidth=1.0,
+                                label=label,
+                            )
+
+                            # --- Add the channel number
+                            ch = ""
+                            try:
+                                if int(foil.name[-2:]):
+                                    ch = int(foil.name[-2:])
+                            # For JET foils
+                            except Exception:
+                                n = foil.name.split("_")[1]
+                                ch = n[2:]
+
+                            ax.text(
+                                hit_rz[0],
+                                hit_rz[1],
+                                ch,
+                                fontsize="10",
+                                ha="center",
+                                va="center",
+                                weight="bold",
+                            )
+
+                        # Debug arrow in ray direction
+                        slit_rz = point3d_to_rz(foil.slit.centre_point)
+                        direction = np.array(
+                            [slit_rz[0] - origin_rz[0], slit_rz[1] - origin_rz[1]]
+                        )
+                        norm = np.linalg.norm(direction)
+                        if norm > 0:
+                            direction = direction / norm
+                            scale = 0.05
+                            ax.quiver(
+                                origin_rz[0],
+                                origin_rz[1],
+                                direction[0] * scale,
+                                direction[1] * scale,
+                                angles="xy",
+                                scale_units="xy",
+                                scale=1,
+                                color="red",
+                            )
+
         ax.legend(loc="upper right")
         ax.set_title(boloGroupName)
 
