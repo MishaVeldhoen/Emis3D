@@ -100,8 +100,6 @@ if True:
             f_,
             boloGroupName=boloGroups[0],
             plot_chord_info=False,
-            color="blue",
-            linewidth=2.0,
         )
 
     # --- Plot each individual bolometer
@@ -112,8 +110,6 @@ if True:
             f_,
             boloGroupName=boloGroups[0],
             plot_chord_info=False,
-            color="red",
-            linewidth=1.0,
         )
 
     chan = np.arange(1, 25)

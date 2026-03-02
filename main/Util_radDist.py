@@ -74,6 +74,31 @@ def radDist_Helical_parallel_return_radDist(input):
     return helical
 
 
+def radDist_SquareTube_parallel(input) -> None:
+    """
+    Computes Square Tube radDists based on input rzArray
+    """
+    rzArray = input[0]
+    config = input[1]
+    squareTube = radDist.SquareTube(startR=rzArray[0], startZ=rzArray[1], config=config)
+    squareTube.build()
+
+    print(f"DONE with squareTube radDist, R = {rzArray[0]:.2f}m, z = {rzArray[1]:.2f}m")
+
+
+def radDist_SquareTube_parallel_return_radDist(input):
+    """
+    Computes Square Tube radDists based on input rzArray
+    """
+    rzArray = input[0]
+    config = input[1]
+    squareTube = radDist.SquareTube(startR=rzArray[0], startZ=rzArray[1], config=config)
+    squareTube.build()
+
+    print(f"DONE with squareTube radDist, R = {rzArray[0]:.2f}m, z = {rzArray[1]:.2f}m")
+    return squareTube
+
+
 def callRZGridTokamak(tokamak, numRgrid=30, numZgrid=15) -> np.ndarray:
     """
     Calls createRZgrid using the tokamak class as an input

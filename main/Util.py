@@ -464,3 +464,45 @@ def split_revolutions(x, y, z, phi, R, L) -> list:
             )
 
     return revolutions
+
+
+def get_rectangle_corners(rect):
+    """
+    Returns 4 world-space corners of a rectangular primitive.
+    Assumes rectangle centered at local origin.
+    """
+
+    try:
+        w = rect.y_width / 2
+        h = rect.x_width / 2
+    except Exception:
+        w = rect.dy / 2
+        h = rect.dx / 2
+
+    local_corners = [
+        (-w, -h, 0),
+        (-w, h, 0),
+        (w, -h, 0),
+        (w, h, 0),
+    ]
+
+    world = rect.to_root()
+
+    corners = []
+    for x, y, z in local_corners:
+        p = world * rect.centre_point.__class__(x, y, z)
+        corners.append(p)
+
+    return corners
+
+
+def compute_etendue_metric(p1, p2):
+    """
+    Simple angular separation metric in RZ plane.
+    Larger separation = larger étendue.
+    """
+
+    r1, z1 = point3d_to_rz(p1)
+    r2, z2 = point3d_to_rz(p2)
+
+    return np.sqrt((r1 - r2) ** 2 + (z1 - z2) ** 2)

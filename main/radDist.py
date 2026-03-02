@@ -6,7 +6,6 @@ Created on Fri Jun 11 13:12:06 2021
 
 Re-organized pretty much everything, added parallelization, and a lot more during the refactor -JLH Aug., 2025
 
-TODO: Move _make_raysect_surface_transparent to the tokamak class.
 """
 
 import os
@@ -160,12 +159,7 @@ class RadDist(ABC):
         phi = np.atleast_1d(phi).astype(float)
         theta = np.atleast_1d(theta).astype(float)
 
-        # --- First call _evaluate to get the emissivity, then check if it is inside the tokamak, if not return 0
-        # emiss format: {emissionName: np.array[self._evalutate(R0,z0,phi0,theta0), self._evalutate(R1,z1,phi1,theta1), ...]}
-        # aka, it is an array of emission at each R, z, phi, and theta location
-        emiss = self._evaluate(R, z, phi, theta, emissionName=emissionName)
-
-        # --- Checking to see if each point is inside the tokamak wall
+        # --- Filling up the other arrays if they are only of length 1
         if len(R) == 1:
             R = np.full(len(z), R[0])
         elif len(z) == 1:
@@ -174,13 +168,22 @@ class RadDist(ABC):
             raise ValueError(
                 "R and z must be the same length, or one of them must be length 1."
             )
+        if len(phi) == 1:
+            phi = np.full(len(R), phi[0])
+        if len(theta) == 1:
+            theta = np.full(len(R), theta[0])
+
+        # --- First call _evaluate to get the emissivity, then check if it is inside the tokamak, if not return 0
+        # emiss format: {emissionName: np.array[self._evalutate(R0,z0,phi0,theta0), self._evalutate(R1,z1,phi1,theta1), ...]}
+        # aka, it is an array of emission at each R, z, phi, and theta location
+        emiss = self._evaluate(R, z, phi, theta, emissionName=emissionName)
 
         points = np.column_stack((R, z))
         inside = self.tokamak._inside_tokamak(points)
 
         # --- Multiply the emissivity by 1 if inside, 0 if outside
         result = np.zeros_like(inside, dtype=float)
-        result[inside] = 1.0
+        result[inside] = 1.0e9
 
         # Return the emissivity values for each point, setting to 0 if outside the tokamak
         for emissionName in emiss:
@@ -490,17 +493,7 @@ class RadDist(ABC):
                 weight="bold",
             )
 
-    def _make_raysect_surface_transparent(self, surfaceName="") -> None:
-        """
-        Makes the raysect object transparent. This is done after observation in order
-        for the sightlines to trace properly
-        """
-        # --- Add the emitter to the tokamak wall
-        for val in self.tokamak.world.children:
-            if val.name == surfaceName:
-                val.material = NullMaterial()
-
-    def plotOverview(self, return_figure=False):
+    def plotOverview(self, return_figure=False, plot_etendue=[]):
         """
         Plots the bolometer chords with a contour overplot of the radDist in the top row
         Plots the observed emissivities in the bottom row
@@ -509,12 +502,14 @@ class RadDist(ABC):
 
         """
 
+        tok = self.tokamak
+
         # --- Make the emission surface transparent for accurate ray tracing
-        self._make_raysect_surface_transparent(surfaceName="Emission Surface")
+        tok._make_raysect_surface_transparent(surfaceName="Emission Surface")
 
         # --- Plot everything ---
         # Top row: every bolometer with radDist contour overplot + injection location radDist on the right
-        tok = self.tokamak
+
         colors = ["black", "purple", "blue", "green", "orange", "red"]
         if tok.info is not None:
             boloGroups = tok.info["Bolometer Groups"]
@@ -530,7 +525,12 @@ class RadDist(ABC):
                 plot_count += 1
                 f_ = f.add_subplot(num_rows, num_columns, plot_count)
                 tok._plot_first_wall(f_)
-                tok._plot_bolometers(f_, boloGroupName=boloGroup, plot_chord_info=True)
+                tok._plot_bolometers(
+                    f_,
+                    boloGroupName=boloGroup,
+                    plot_chord_info=True,
+                    plot_etendue=plot_etendue,
+                )
 
                 # --- Plot a cross-section of the radDist
                 phi = tok.get_ave_bolometer_tor_loc(boloGroupName=boloGroup)
@@ -696,6 +696,8 @@ class Helical(RadDist):
                  z locations to evaluate, meters
             phi :: float, list
                    phi locations of the field lines, in radians
+            theta :: float, list
+                        not used as of right now
             emissionName :: str, optional
                             The name of the emission to evalulate. If None, uses self.emissionName
 
@@ -827,6 +829,19 @@ class ElongatedRing(RadDist):
     def _evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
         """
         Find the emissivity given and input R, z, and phi location
+
+        Inputs:
+            R :: float, list
+                 R locations to evalulate, meters
+            z :: float, list
+                 z locations to evaluate, meters
+            phi :: float, list
+                   not used as of right now
+            theta :: float, list
+                    not used as of right now
+            emissionName :: str, optional
+                            The name of the emission to evalulate. If None, uses self.emissionName
+
         """
         # --- Set emissionName if called with self._evalulateCherab()
         if emissionName is None:
@@ -844,6 +859,93 @@ class ElongatedRing(RadDist):
             polSigma=self.info["polSigma"],
             theta=self.info["rotationAngle"],
         )
+        return localEmis
+
+    def _scaling_factor(self, bolo_info, emissionName=None) -> list:
+        """
+        Returns the scaling factor for the bolometer.
+        """
+        numChan = bolo_info["NUM_CHANNELS"]
+        phi = np.deg2rad(float(bolo_info["CAMERA_POSITION_R_Z_PHI"][2]))
+
+        return [float(phi)] * numChan
+
+
+class SquareTube(RadDist):
+    """
+    Produces a square tube around the torus. This class is designed to test the
+    foil.observe() functionality with a simple geometry and make sure that things are correct.
+
+    """
+
+    def __init__(
+        self,
+        startR=None,
+        startZ=None,
+        config={},
+    ):
+        # Ensure startR and startZ are floats, not None
+        if startR is None:
+            startR = float(config.get("startR"))
+        if startZ is None:
+            startZ = float(config.get("startZ"))
+
+        dR = config.get("dR")
+        dz = config.get("dz")
+        if dR is None or dz is None:
+            raise ValueError(
+                "dR and dz must be provided in the config for SquareTube radDist."
+            )
+
+        super(SquareTube, self).__init__(startR=startR, startZ=startZ, config=config)
+        self.info["distType"] = "squareTube"
+        self.info["emissionNames"] = ["squareTube"]
+
+        self._build_tokamak(
+            tokamakName=self.info["tokamakName"],
+            mode="Build",
+            reflections=False,
+            eqFileName=self.info["eqFileName"],
+        )
+
+        str_ = f"Building Square Tube radDist using starting at R = {startR:.2f} +/- {dR:.2f}m and z = {startZ:.2f} +/- {dz:.2f}m"
+        print(str_)
+
+    def _evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
+        """
+        Find the emissivity given and input R, z, and phi location
+
+        Inputs:
+            R :: float, list
+                 R locations to evalulate, meters
+            z :: float, list
+                 z locations to evaluate, meters
+            phi :: float, list
+                   not used as of right now
+            theta :: float, list
+                    not used as of right now
+            emissionName :: str, optional
+                            The name of the emission to evalulate. If None, uses self.emissionName
+
+        """
+        # --- Set emissionName if called with self._evalulateCherab()
+        if emissionName is None:
+            emissionName = self.emissionName
+
+        localEmis = {}
+        # --- Return 1 if within the square tube, 0 if outside
+        R_in = (R >= self.info["startR"] - self.info["dR"]) & (
+            R <= self.info["startR"] + self.info["dR"]
+        )
+        z_in = (z >= self.info["startZ"] - self.info["dz"]) & (
+            z <= self.info["startZ"] + self.info["dz"]
+        )
+        loc_ = np.where(R_in & z_in)
+        emission = np.zeros(len(R))
+        emission[loc_] = 1.0
+
+        localEmis[emissionName] = emission
+
         return localEmis
 
     def _scaling_factor(self, bolo_info, emissionName=None) -> list:
