@@ -64,15 +64,12 @@ class RadDist(ABC):
         """
         Wrapper function for self.calc_emissivity to take inputs from Cherab
         """
-        theta = self.info["rotationAngle"]
 
         R, phi = XY_To_RPhi(X, Y)
         # --- Convert phi to be positive
         if phi is not None and phi < 0:
             phi += 2.0 * np.pi
-        emission = self.calc_emissivity(
-            [R], [Z], [phi], theta, emissionName=self.emissionName
-        )
+        emission = self.calc_emissivity([R], [Z], [phi], emissionName=self.emissionName)
         return emission[self.emissionName].item()
 
     def _update_bolometer_properties(self) -> None:
@@ -142,22 +139,21 @@ class RadDist(ABC):
         self.data["scaleFactor"] = scaleFactor
 
     @abstractmethod
-    def _evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
+    def _evaluate(self, R, z, phi, emissionName=None) -> dict:
         """
-        Abstract method to be implemented by subclasses to return the emissivity at the given R, z, phi and theta.
+        Abstract method to be implemented by subclasses to return the emissivity at the given R, z, and phi.
         """
         pass
 
-    def calc_emissivity(self, R, z, phi, theta, emissionName=None) -> dict:
+    def calc_emissivity(self, R, z, phi, emissionName=None) -> dict:
         """
-        Checks that R, z, phi, and theta are withink the tokamak wall limits, then calls _evaluate to get the emissivity.
+        Checks that R, z, phi are withink the tokamak wall limits, then calls _evaluate to get the emissivity.
         """
 
         # Making sure the inputs arrays are of the correct type
         R = np.atleast_1d(R).astype(float)
         z = np.atleast_1d(z).astype(float)
         phi = np.atleast_1d(phi).astype(float)
-        theta = np.atleast_1d(theta).astype(float)
 
         # --- Filling up the other arrays if they are only of length 1
         if len(R) == 1:
@@ -170,13 +166,11 @@ class RadDist(ABC):
             )
         if len(phi) == 1:
             phi = np.full(len(R), phi[0])
-        if len(theta) == 1:
-            theta = np.full(len(R), theta[0])
 
         # --- First call _evaluate to get the emissivity, then check if it is inside the tokamak, if not return 0
-        # emiss format: {emissionName: np.array[self._evalutate(R0,z0,phi0,theta0), self._evalutate(R1,z1,phi1,theta1), ...]}
-        # aka, it is an array of emission at each R, z, phi, and theta location
-        emiss = self._evaluate(R, z, phi, theta, emissionName=emissionName)
+        # emiss format: {emissionName: np.array[self._evalutate(R0,z0,phi0) self._evalutate(R1,z1,phi1, ...]}
+        # aka, it is an array of emission at each R, z, and phi location
+        emiss = self._evaluate(R, z, phi, emissionName=emissionName)
 
         points = np.column_stack((R, z))
         inside = self.tokamak._inside_tokamak(points)
@@ -265,7 +259,6 @@ class RadDist(ABC):
             # --- Evalulate all of the points at once
             R_ = np.array(R_)
             z_ = np.array(z_)
-            theta = self.info["rotationAngle"]
 
             for numbin in range(0, numBins):
                 # print(f"Calculating powerPerBin {numbin + 1} of {numBins}")
@@ -277,7 +270,7 @@ class RadDist(ABC):
                 for emissionName in self.info["emissionNames"]:
 
                     emission = self.calc_emissivity(
-                        R_, z_, phi, theta, emissionName=emissionName
+                        R_, z_, phi, emissionName=emissionName
                     )
 
                     if emissionName not in self.data["emisSqArray"]:
@@ -442,7 +435,7 @@ class RadDist(ABC):
         """
         Returns a contour plot of the radDist at a given phi location
         """
-        theta = self.info["rotationAngle"]
+
         if self.tokamak.wall is None:
             raise RuntimeError(
                 "Tokamak wall is not initialized. Ensure that the wall attribute is set before calling plotCrossSection()."
@@ -461,7 +454,6 @@ class RadDist(ABC):
                     [rarray[ii]],
                     zarray,
                     phi=[phi],
-                    theta=theta,
                     emissionName=emissionName,
                 )
                 emiss[ii, :] += temp[emissionName].squeeze()
@@ -684,7 +676,7 @@ class Helical(RadDist):
         ]
         self.info["numTransists"] = numTransists
 
-    def _evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
+    def _evaluate(self, R, z, phi, emissionName=None) -> dict:
         """
         Return the emissivity (W/m^3/rad) at the point (R,z,ph) according to this
         instantiation of Emis3D.
@@ -696,8 +688,6 @@ class Helical(RadDist):
                  z locations to evaluate, meters
             phi :: float, list
                    phi locations of the field lines, in radians
-            theta :: float, list
-                        not used as of right now
             emissionName :: str, optional
                             The name of the emission to evalulate. If None, uses self.emissionName
 
@@ -826,7 +816,7 @@ class ElongatedRing(RadDist):
 
             print(str_)
 
-    def _evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
+    def _evaluate(self, R, z, phi, emissionName=None) -> dict:
         """
         Find the emissivity given and input R, z, and phi location
 
@@ -837,8 +827,6 @@ class ElongatedRing(RadDist):
                  z locations to evaluate, meters
             phi :: float, list
                    not used as of right now
-            theta :: float, list
-                    not used as of right now
             emissionName :: str, optional
                             The name of the emission to evalulate. If None, uses self.emissionName
 
@@ -857,7 +845,6 @@ class ElongatedRing(RadDist):
             z0=self.info["startZ"],
             elongation=self.info["elongation"],
             polSigma=self.info["polSigma"],
-            theta=self.info["rotationAngle"],
         )
         return localEmis
 
@@ -911,7 +898,7 @@ class SquareTube(RadDist):
         str_ = f"Building Square Tube radDist using starting at R = {startR:.2f} +/- {dR:.2f}m and z = {startZ:.2f} +/- {dz:.2f}m"
         print(str_)
 
-    def _evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
+    def _evaluate(self, R, z, phi, emissionName=None) -> dict:
         """
         Find the emissivity given and input R, z, and phi location
 
@@ -922,8 +909,6 @@ class SquareTube(RadDist):
                  z locations to evaluate, meters
             phi :: float, list
                    not used as of right now
-            theta :: float, list
-                    not used as of right now
             emissionName :: str, optional
                             The name of the emission to evalulate. If None, uses self.emissionName
 

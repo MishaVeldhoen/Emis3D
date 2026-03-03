@@ -25,9 +25,10 @@ from raysect.core import (
     Vector3D,
     translate,
 )
-
+from raysect.optical import AbsorbingSurface, NullMaterial  # type:ignore
 from main.Globals import *
 from main.Util import RPhi_To_XY, config_loader, rotate_vector
+from raysect.primitive import Box, Subtract
 
 
 class Bolometer(object):
@@ -145,20 +146,85 @@ class Bolometer(object):
         # --- Constants from the configuration file
         SLIT_WIDTH = self.info["SLIT_WIDTH"]
         SLIT_HEIGHT = self.info["SLIT_HEIGHT"]
+        SLIT_THICKNESS = 0.0005
         FOIL_WIDTH = self.info["FOIL_WIDTH"]
         FOIL_HEIGHT = self.info["FOIL_HEIGHT"]
         FOIL_CORNER_CURVATURE = self.info["FOIL_CORNER_CURVATURE"]
         SLIT_SENSOR_SEPARATION = self.info["SLIT_SENSOR_SEPARATION"]
         FOIL_SEPARATION = self.info["FOIL_SEPARATION"]
+        FOIL_POSITIONS = self.info["FOIL_POSITIONS"]
         CAMERA_POSITION_R_Z_PHI = self.info["CAMERA_POSITION_R_Z_PHI"]
         CAMERA_PHI_RAD = np.deg2rad(CAMERA_POSITION_R_Z_PHI[2])
         x, y = RPhi_To_XY(CAMERA_POSITION_R_Z_PHI[0], CAMERA_PHI_RAD)
         CAMERA_POSITION_X_Y_Z = (x, y, CAMERA_POSITION_R_Z_PHI[1])
+        WALL_THICKNESS = 0.005  # 5 mm thick walls
 
-        # --- Instance of the bolometer camera, set camera_geometry to None, add it later
-        bolometer_camera = BolometerCamera(
-            camera_geometry=None, parent=self.world, name=self.info["NAME"]
+        # --- Derived dimensions
+        half_array_width = (
+            np.max(np.abs(FOIL_POSITIONS)) * FOIL_SEPARATION + FOIL_WIDTH / 2
         )
+        clear_width = 2 * half_array_width
+        clear_height = max(SLIT_HEIGHT, FOIL_HEIGHT)
+
+        housing_width = clear_width + 2 * WALL_THICKNESS
+        housing_height = clear_height + 2 * WALL_THICKNESS
+        housing_depth = SLIT_SENSOR_SEPARATION + FOIL_WIDTH + 2 * WALL_THICKNESS
+
+        # -------------------------------------------------------------------------
+        # 1. Create the camera node FIRST so all geometry can be parented to it.
+        #    This ensures that any transform on bolometer_camera moves everything.
+        # -------------------------------------------------------------------------
+        bolometer_camera = BolometerCamera(parent=self.world, name="bolometer_camera")
+
+        # -------------------------------------------------------------------------
+        # 2. Build the housing geometry, all parented to bolometer_camera.
+        # -------------------------------------------------------------------------
+        wall_vec_lower = Vector3D(WALL_THICKNESS, WALL_THICKNESS, WALL_THICKNESS)
+        wall_vec_upper = Vector3D(WALL_THICKNESS, WALL_THICKNESS, SLIT_THICKNESS / 2.0)
+
+        outer_lower = Point3D(-housing_width / 2, -housing_height / 2, -housing_depth)
+        outer_upper = Point3D(housing_width / 2, housing_height / 2, 0)
+
+        camera_box_outer = Box(
+            lower=outer_lower,
+            upper=outer_upper,
+            parent=bolometer_camera,
+            name="Housing Outer",
+        )
+
+        # Inner void: inset on all sides by WALL_THICKNESS to leave proper walls
+        camera_box_inner = Box(
+            lower=outer_lower + wall_vec_lower,
+            upper=outer_upper - wall_vec_upper,
+            parent=bolometer_camera,
+            name="Housing Inner",
+        )
+
+        camera_housing = Subtract(
+            camera_box_outer,
+            camera_box_inner,
+            parent=bolometer_camera,
+            name="Hollow Housing",
+        )
+
+        # Cut the slit aperture through the front face
+        aperture = Box(
+            lower=Point3D(-SLIT_WIDTH / 2, -SLIT_HEIGHT / 2, -SLIT_THICKNESS / 2),
+            upper=Point3D(SLIT_WIDTH / 2, SLIT_HEIGHT / 2, -SLIT_THICKNESS / 2),
+            parent=bolometer_camera,
+            name="Aperture",
+        )
+
+        camera_housing = Subtract(
+            camera_housing,
+            aperture,
+            parent=bolometer_camera,
+            name="Housing with Aperture",
+        )
+        camera_housing.material = NullMaterial()
+
+        # Attach the finished housing to the camera
+        bolometer_camera.camera_geometry = camera_housing
 
         # --- Create a slit at the camera origin
         slit = BolometerSlit(
@@ -168,6 +234,7 @@ class Bolometer(object):
             dx=SLIT_WIDTH,
             basis_y=YAXIS,
             dy=SLIT_HEIGHT,
+            dz=SLIT_THICKNESS,
             parent=bolometer_camera,
         )
 
@@ -179,7 +246,9 @@ class Bolometer(object):
         )
 
         # --- Create the foils relative to the sensor
-        for ii, shift in enumerate(self.info["FOIL_POSITIONS"]):
+        for ii, shift in enumerate(FOIL_POSITIONS):
+
+            # Older version
             foil_transform = translate(shift * FOIL_SEPARATION, 0, 0) * sensor.transform
             foil = BolometerFoil(
                 detector_id=self.info["CHANNEL_TAGS"][ii],
@@ -215,8 +284,6 @@ class Bolometer(object):
         y_axis = e_phi  # Camera y-axis: e_phi (toroidal direction)
         # Camera x-axis: y × z to form right-handed coordinate system
         x_axis = y_axis.cross(z_axis).normalise()
-
-        # x_axis = y_axis.cross(z_axis).normalise()
         # --- Force orthogonality for safety
         y_axis = z_axis.cross(x_axis).normalise()
 
@@ -393,3 +460,20 @@ class Bolometer(object):
             analytic_etendues.append(analytic_etendue)
         self.etendues = analytic_etendues
         self.etendues_error = np.array(analytic_etendues) * 0.1
+
+    def change_camera_material(self, material=""):
+        """
+        Changes the 'Housing with Aperture' material to the
+        input material
+        """
+
+        if material not in ["Absorbing", "Null"]:
+            raise RuntimeError("Material input must be Absorbing or Null")
+
+        mat = AbsorbingSurface()
+        if mat == "Null":
+            mat = NullMaterial()
+
+        for c_ in self.bolometer_camera.children:
+            if c_.name == "Housing with Aperture":
+                c_.material = mat

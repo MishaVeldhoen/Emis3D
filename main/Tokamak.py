@@ -275,7 +275,7 @@ class Tokamak(object):
                 wall = Subtract(
                     cylinder_outer,
                     cylinder_inner,
-                    material=AbsorbingSurface(),  # Do NOT CHANGE THIS to a NullSurface, otherwise the foil.observe will not work properly
+                    material=NullMaterial(),  # Do NOT CHANGE THIS to a NullSurface, otherwise the foil.observe will not work properly
                     name="Tokamak Wall",
                     parent=self.world,
                     transform=translate(0, 0, offset - 0.1),
@@ -302,7 +302,7 @@ class Tokamak(object):
                     name="Emission Surface",
                     parent=self.world,
                     transform=translate(0, 0, offset),
-                    material=AbsorbingSurface(),
+                    material=NullMaterial(),
                 )
 
         # --- Load the CAD file
@@ -723,6 +723,9 @@ class Tokamak(object):
 
         ax.legend(loc="upper right")
         ax.set_title(boloGroupName)
+
+        # --- Change the inner wall back so the etendue's can be calculated correctly
+        self._change_emission_surface_material(NullMaterial())
 
     def get_ave_bolometer_tor_loc(self, boloGroupName):
         """
