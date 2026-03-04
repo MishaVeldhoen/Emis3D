@@ -171,7 +171,6 @@ class Bolometer(object):
             parent=bolometer_camera,
         )
 
-        # --- Create the sensor node behind the slit
         sensor = Node(
             name=f"{self.info['NAME']} sensor",
             parent=bolometer_camera,
@@ -202,13 +201,18 @@ class Bolometer(object):
         # --- Tilt the camera downward if it is downward facing
         sign = -1 if self.info["CAMERA_DOWNWARD_FACING"] else 1
         tilt_rad = sign * np.deg2rad(self.info["CAMERA_ROTATION"])
+        skew_rad = np.deg2rad(self.info["SKEW_ANGLE"])
 
         e_R = Vector3D(np.cos(CAMERA_PHI_RAD), np.sin(CAMERA_PHI_RAD), 0).normalise()
         e_z = ZAXIS
         e_phi = e_z.cross(e_R).normalise()
 
-        # Rotate e_z in R–z plane
-        view_dir = rotate_vector(e_z, e_phi, tilt_rad).normalise()
+        # Rotate e_r and e_phi about e_z for toroidal skew
+        # e_R_skewed = rotate_vector(e_R, e_z, skew_rad).normalise() # this one not used
+        e_phi_skewed = rotate_vector(e_phi, e_z, skew_rad).normalise()
+
+        # Rotate e_z in R–z plane for poloidal tilt
+        view_dir = rotate_vector(e_z, e_phi_skewed, tilt_rad).normalise()
 
         # Build orthonormal basis
         z_axis = view_dir  # Camera z-axis: the direction the camera "looks"
