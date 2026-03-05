@@ -18,13 +18,14 @@ from raysect.core import Point3D, Node, translate, rotate_basis, Point2D
 from main.Util import (
     point3d_to_rz,
     get_rectangle_corners,
-    draw_Cherab_box,
     compute_etendue_metric,
 )
+from main.Util_plotting import draw_Cherab_box, get_to_world
 from raysect.optical import World
 from raysect.primitive import Box, Subtract
 from raysect.optical import AbsorbingSurface, NullMaterial  # type:ignore
 from raysect.core.math import Vector3D
+
 
 tokamakName = "DIII-D"
 configFileName = "SX90PF_UP_config.yaml"
@@ -42,7 +43,7 @@ plt.ion()
 The camera is constructed with the slit plane at z = 0, facing in the positive z-direction
 
 """
-if True:
+if False:
     t = Tokamak(
         tokamakName="DIII-D",
         mode="Analysis",
@@ -63,13 +64,15 @@ if True:
     # draw_box(ax, inner_lower, inner_upper)
     # draw_box(ax, slit_lower, slit_upper)
 
-    # TODO: Make it match the name = 'Camera', "slit", etc.
-    # draw_Cherab_box(ax, bolometer_camera) # NOTE the camera geometery does not translate correctly!!!
-
-    if False:
+    if True:
         fig = plt.figure()
         ax = fig.add_subplot(111, projection="3d")
         colors = ["black", "red", "green", "blue"]
+        # TODO: Make it match the name = 'Camera', "slit", etc.
+        draw_Cherab_box(
+            ax, bolometer_camera, to_world=True
+        )  # NOTE the camera geometery does not translate correctly!!!
+
         for ii, foil in enumerate(bolometer_camera):
             # if ax is not None:
             length = 0.1
@@ -146,7 +149,7 @@ if True:
             ax.add_collection3d(poly)
 
 
-if False:
+if True:
     world = World()
     # --- Convenient constants
     XAXIS = Vector3D(1, 0, 0)
@@ -174,11 +177,11 @@ if False:
                 np.max(np.abs(FOIL_POSITIONS)) * FOIL_SEPARATION + FOIL_WIDTH / 2
             )
             clear_width = 2 * half_array_width
-            clear_height = max(SLIT_HEIGHT, FOIL_HEIGHT)
+            clear_height = 2 * max(SLIT_HEIGHT, FOIL_HEIGHT)
 
             housing_width = clear_width + 2 * WALL_THICKNESS
-            housing_height = clear_height + 2 * WALL_THICKNESS
-            housing_depth = SLIT_SENSOR_SEPARATION + FOIL_WIDTH + 2 * WALL_THICKNESS
+            housing_height = 2 * clear_height + 2 * WALL_THICKNESS
+            housing_depth = SLIT_SENSOR_SEPARATION + 2 * FOIL_WIDTH + 2 * WALL_THICKNESS
 
             # -------------------------------------------------------------------------
             # 1. Create the camera node FIRST so all geometry can be parented to it.
@@ -286,7 +289,9 @@ if False:
 
                 bolometer_camera.add_foil_detector(foil)
 
-            # bolometer_camera.transform = translate(0, 0, 1)
+            bolometer_camera.transform = translate(0, 0, 1) * rotate_basis(
+                -ZAXIS, YAXIS
+            )
 
             # -----------------------------
             # Plot everything
@@ -300,7 +305,8 @@ if False:
             # draw_box(ax, slit_lower, slit_upper)
 
             # TODO: Make it match the name = 'Camera', "slit", etc.
-            draw_Cherab_box(ax, bolometer_camera)
+
+            draw_Cherab_box(ax, bolometer_camera, to_world=True)
 
             # Slit
             # draw_Cherab_box(

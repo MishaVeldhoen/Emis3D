@@ -13,10 +13,7 @@ import os
 import numpy as np
 from cherab.tools.emitters import RadiationFunction
 from matplotlib import cm
-from raysect.core.math import translate
-from raysect.optical import VolumeTransform, NullMaterial  # type: ignore
-
-from raysect.primitive import Cylinder, Subtract
+from raysect.optical import VolumeTransform  # type: ignore
 
 import main.Util_radDist as Util_radDist
 from main.Globals import *

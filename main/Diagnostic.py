@@ -158,13 +158,14 @@ class Bolometer(object):
         x, y = RPhi_To_XY(CAMERA_POSITION_R_Z_PHI[0], CAMERA_PHI_RAD)
         CAMERA_POSITION_X_Y_Z = (x, y, CAMERA_POSITION_R_Z_PHI[1])
         WALL_THICKNESS = 0.005  # 5 mm thick walls
+        WALL_THICKNESS = 1e-4
 
         # --- Derived dimensions
         half_array_width = (
             np.max(np.abs(FOIL_POSITIONS)) * FOIL_SEPARATION + FOIL_WIDTH / 2
         )
         clear_width = 2 * half_array_width
-        clear_height = max(SLIT_HEIGHT, FOIL_HEIGHT)
+        clear_height = 2 * max(SLIT_HEIGHT, FOIL_HEIGHT)
 
         housing_width = clear_width + 2 * WALL_THICKNESS
         housing_height = clear_height + 2 * WALL_THICKNESS
@@ -180,7 +181,9 @@ class Bolometer(object):
         # 2. Build the housing geometry, all parented to bolometer_camera.
         # -------------------------------------------------------------------------
         wall_vec_lower = Vector3D(WALL_THICKNESS, WALL_THICKNESS, WALL_THICKNESS)
-        wall_vec_upper = Vector3D(WALL_THICKNESS, WALL_THICKNESS, SLIT_THICKNESS / 2.0)
+        wall_vec_upper = Vector3D(
+            WALL_THICKNESS, WALL_THICKNESS, WALL_THICKNESS
+        )  # SLIT_THICKNESS / 2.0)
 
         outer_lower = Point3D(-housing_width / 2, -housing_height / 2, -housing_depth)
         outer_upper = Point3D(housing_width / 2, housing_height / 2, 0)
@@ -210,7 +213,7 @@ class Bolometer(object):
         # Cut the slit aperture through the front face
         aperture = Box(
             lower=Point3D(-SLIT_WIDTH / 2, -SLIT_HEIGHT / 2, -SLIT_THICKNESS / 2),
-            upper=Point3D(SLIT_WIDTH / 2, SLIT_HEIGHT / 2, -SLIT_THICKNESS / 2),
+            upper=Point3D(SLIT_WIDTH / 2, SLIT_HEIGHT / 2, SLIT_THICKNESS / 2),
             parent=bolometer_camera,
             name="Aperture",
         )
@@ -221,7 +224,11 @@ class Bolometer(object):
             parent=bolometer_camera,
             name="Housing with Aperture",
         )
-        camera_housing.material = NullMaterial()
+
+        if self.info["NAME"] in ["SX45F_UP", "SX45F_DOWN"]:
+            camera_housing.material = AbsorbingSurface()
+        else:
+            camera_housing.material = NullMaterial()
 
         # Attach the finished housing to the camera
         bolometer_camera.camera_geometry = camera_housing
@@ -236,6 +243,7 @@ class Bolometer(object):
             dy=SLIT_HEIGHT,
             dz=SLIT_THICKNESS,
             parent=bolometer_camera,
+            csg_aperture=False,
         )
 
         # --- Create the sensor node behind the slit
