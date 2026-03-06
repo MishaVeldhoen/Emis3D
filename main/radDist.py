@@ -414,7 +414,7 @@ class RadDist(ABC):
                             ans_error = foil.pipelines[0].value.error()
 
                     except Exception as e:
-                        print(f"An error occured: {e}")
+                        print(f"An error occured in bolos_observe: {e}")
                         # print(
                         #    f"Single layer cameras currently not supported, add functionality within bolos_observe!"
                         # )

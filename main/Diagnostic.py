@@ -225,10 +225,10 @@ class Bolometer(object):
             name="Housing with Aperture",
         )
 
-        if self.info["NAME"] in ["SX45F_UP", "SX45F_DOWN"]:
-            camera_housing.material = AbsorbingSurface()
-        else:
-            camera_housing.material = NullMaterial()
+        # if self.info["NAME"] in ["SX45F_UP", "SX45F_DOWN"]:
+        camera_housing.material = AbsorbingSurface()
+        # else:
+        #    camera_housing.material = NullMaterial()
 
         # Attach the finished housing to the camera
         bolometer_camera.camera_geometry = camera_housing
@@ -243,7 +243,7 @@ class Bolometer(object):
             dy=SLIT_HEIGHT,
             dz=SLIT_THICKNESS,
             parent=bolometer_camera,
-            csg_aperture=False,
+            csg_aperture=True,
         )
 
         # --- Create the sensor node behind the slit

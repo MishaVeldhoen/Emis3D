@@ -266,6 +266,8 @@ class Tokamak(object):
                 )
 
                 # --- Inner wall
+                # NOTE: This should be modified if any bolometers are inside of this radius,
+                # otherwise Raysect will not trace the chords correctly
                 cylinder_inner = Cylinder(
                     radius=minR - 0.2,
                     height=height + 0.2,
@@ -275,7 +277,7 @@ class Tokamak(object):
                 wall = Subtract(
                     cylinder_outer,
                     cylinder_inner,
-                    material=NullMaterial(),  # Do NOT CHANGE THIS to a NullSurface, otherwise the foil.observe will not work properly
+                    material=AbsorbingSurface(),  # Do NOT CHANGE THIS to a NullSurface, otherwise the foil.observe will not work properly
                     name="Tokamak Wall",
                     parent=self.world,
                     transform=translate(0, 0, offset - 0.1),
