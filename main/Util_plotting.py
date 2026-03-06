@@ -51,16 +51,11 @@ def draw_Cherab_box(
     if to_world:
         w_ = get_to_world(camera)
 
-    print(w_)
-
-    transform = camera.transform
     box = camera.children[0]
-    values = extract_csg_bounds(box, transform=transform)
+    values = extract_csg_bounds(box)
 
     for ii, val in enumerate(values):
-        print("before", val["lower"])
         v_low = proj(val["lower"], to_world=w_)
-        print("after", v_low)
         v_up = proj(val["upper"], to_world=w_)
 
         x = [v_low.x, v_up.x]
@@ -99,7 +94,7 @@ def draw_Cherab_box(
                 label = "__no_legend__"
 
 
-def extract_csg_bounds(obj, path="root", results=None, visited=None, transform=None):
+def extract_csg_bounds(obj, path="root", results=None, visited=None):
     """
     Recursively traverse a Raysect CSG tree and extract:
         - primitive name
@@ -111,10 +106,6 @@ def extract_csg_bounds(obj, path="root", results=None, visited=None, transform=N
         list of dicts
     """
 
-    if transform is None:
-        T = AffineMatrix3D()
-    else:
-        T = transform
     if results is None:
         results = []
 
@@ -135,8 +126,8 @@ def extract_csg_bounds(obj, path="root", results=None, visited=None, transform=N
             {
                 "path": path,
                 "name": getattr(obj, "name", None),
-                "lower": obj.lower.transform(T),
-                "upper": obj.upper.transform(T),
+                "lower": obj.lower,
+                "upper": obj.upper,
             }
         )
 

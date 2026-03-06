@@ -20,7 +20,7 @@ from main.Util import (
     get_rectangle_corners,
     compute_etendue_metric,
 )
-from main.Util_plotting import draw_Cherab_box, get_to_world
+from main.Util_plotting import draw_Cherab_box, get_to_world, extract_csg_bounds
 from raysect.optical import World
 from raysect.primitive import Box, Subtract
 from raysect.optical import AbsorbingSurface, NullMaterial  # type:ignore
@@ -43,6 +43,8 @@ plt.ion()
 The camera is constructed with the slit plane at z = 0, facing in the positive z-direction
 
 """
+
+# Camera is built in the diagnostics class
 if False:
     t = Tokamak(
         tokamakName="DIII-D",
@@ -149,6 +151,7 @@ if False:
             ax.add_collection3d(poly)
 
 
+# Building the camera here
 if True:
     world = World()
     # --- Convenient constants
@@ -290,7 +293,7 @@ if True:
                 bolometer_camera.add_foil_detector(foil)
 
             bolometer_camera.transform = translate(0, 0, 1) * rotate_basis(
-                -ZAXIS, YAXIS
+                -ZAXIS, 0.5 * YAXIS
             )
 
             # -----------------------------
