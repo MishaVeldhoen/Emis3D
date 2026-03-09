@@ -263,6 +263,7 @@ class Tokamak(object):
                     radius=maxR + 0.2,
                     height=height + 0.2,
                     name="Outer wall",
+                    material=NullMaterial(),
                 )
 
                 # --- Inner wall
@@ -272,6 +273,7 @@ class Tokamak(object):
                     radius=minR - 0.2,
                     height=height + 0.2,
                     name="Inner wall",
+                    material=NullMaterial(),
                 )
 
                 wall = Subtract(
@@ -288,14 +290,14 @@ class Tokamak(object):
                 emiss_outer = Cylinder(
                     radius=self.wall["maxr"] + 1.0,
                     height=height,
-                    name="Outer wall",
+                    name="Outer emission wall",
                 )
 
                 # --- Inner wall
                 emiss_inner = Cylinder(
                     radius=self.wall["minr"],
                     height=height,
-                    name="Inner wall",
+                    name="Inner emission wall",
                 )
 
                 emiss_surface = Subtract(
@@ -412,7 +414,9 @@ class Tokamak(object):
             if val.name == surfaceName:
                 val.material = NullMaterial()
 
-    def _change_emission_surface_material(self, material) -> None:
+    def _change_emission_surface_material(
+        self, material, name="Emission Surface"
+    ) -> None:
         """
         Changes the material of the emission surface, used for testing purposes
         """
@@ -420,8 +424,12 @@ class Tokamak(object):
             print("No tokamak information loaded, cannot continue!")
             return
 
+        if name not in ["Emission Surface", "Tokamak Wall"]:
+            print("Name must be one of these two: Emission Surface, Tokamak Wall")
+            return
+
         for child in self.world.children:
-            if child.name == "Emission Surface":
+            if child.name == name:
                 child.material = material
 
     def _plot_first_wall(self, ax=None) -> None:
@@ -606,7 +614,7 @@ class Tokamak(object):
         """
 
         # --- Change the inner wall to an absorbing surface, so the chords have something intersect with
-        self._change_emission_surface_material(AbsorbingSurface())
+        self._change_emission_surface_material(AbsorbingSurface(), name="Tokamak Wall")
 
         # --- Make sure self.info is initiated
         if self.info is None:
@@ -725,9 +733,6 @@ class Tokamak(object):
 
         ax.legend(loc="upper right")
         ax.set_title(boloGroupName)
-
-        # --- Change the inner wall back so the etendue's can be calculated correctly
-        self._change_emission_surface_material(NullMaterial())
 
     def get_ave_bolometer_tor_loc(self, boloGroupName):
         """
@@ -1057,3 +1062,14 @@ class Tokamak(object):
             self.cameras[ii]["normal_vector"] = (
                 self.cameras[ii]["detector_center"].vector_to(Point3D(x, y, z))
             ).normalise()  # inward pointing
+
+    def calc_etendues(self):
+        """
+        Sets the wall material to NullMaterial prior to calling calc_etendues for each bolometer
+
+        """
+
+        self._change_emission_surface_material(NullMaterial(), name="Tokamak Wall")
+        for bolo in self.bolometers:
+            bolo.calc_etendues()
+        self._change_emission_surface_material(AbsorbingSurface(), name="Tokamak Wall")

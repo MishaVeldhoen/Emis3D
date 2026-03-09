@@ -45,7 +45,7 @@ The camera is constructed with the slit plane at z = 0, facing in the positive z
 """
 
 # Camera is built in the diagnostics class
-if False:
+if True:
     t = Tokamak(
         tokamakName="DIII-D",
         mode="Analysis",
@@ -56,12 +56,12 @@ if False:
     bolometer_camera = t.bolometers[0].bolometer_camera
     foil = bolometer_camera.foil_detectors[0]
 
-    t.bolometers[0].change_camera_material(material="Absorbing")
+    # t.bolometers[0].change_camera_material(material="Absorbing")
     print(foil.calculate_etendue())
-    t.bolometers[1].change_camera_material(material="Absorbing")
-    print("After changing to absorbing", foil.calculate_etendue())
-    t.bolometers[1].change_camera_material(material="Null")
-    print("After changing back to Null", foil.calculate_etendue())
+    # t.bolometers[1].change_camera_material(material="Absorbing")
+    # print("After changing to absorbing", foil.calculate_etendue())
+    # t.bolometers[1].change_camera_material(material="Null")
+    # print("After changing back to Null", foil.calculate_etendue())
     # Housing
     # draw_box(ax, inner_lower, inner_upper)
     # draw_box(ax, slit_lower, slit_upper)
@@ -152,7 +152,7 @@ if False:
 
 
 # Building the camera here
-if True:
+if False:
     world = World()
     # --- Convenient constants
     XAXIS = Vector3D(1, 0, 0)

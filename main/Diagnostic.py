@@ -158,7 +158,6 @@ class Bolometer(object):
         x, y = RPhi_To_XY(CAMERA_POSITION_R_Z_PHI[0], CAMERA_PHI_RAD)
         CAMERA_POSITION_X_Y_Z = (x, y, CAMERA_POSITION_R_Z_PHI[1])
         WALL_THICKNESS = 0.005  # 5 mm thick walls
-        WALL_THICKNESS = 1e-4
 
         # --- Derived dimensions
         half_array_width = (
@@ -168,8 +167,8 @@ class Bolometer(object):
         clear_height = 2 * max(SLIT_HEIGHT, FOIL_HEIGHT)
 
         housing_width = clear_width + 2 * WALL_THICKNESS
-        housing_height = clear_height + 2 * WALL_THICKNESS
-        housing_depth = SLIT_SENSOR_SEPARATION + FOIL_WIDTH + 2 * WALL_THICKNESS
+        housing_height = 2 * clear_height + 2 * WALL_THICKNESS
+        housing_depth = SLIT_SENSOR_SEPARATION + 2 * FOIL_WIDTH + 2 * WALL_THICKNESS
 
         # -------------------------------------------------------------------------
         # 1. Create the camera node FIRST so all geometry can be parented to it.
@@ -181,9 +180,7 @@ class Bolometer(object):
         # 2. Build the housing geometry, all parented to bolometer_camera.
         # -------------------------------------------------------------------------
         wall_vec_lower = Vector3D(WALL_THICKNESS, WALL_THICKNESS, WALL_THICKNESS)
-        wall_vec_upper = Vector3D(
-            WALL_THICKNESS, WALL_THICKNESS, WALL_THICKNESS
-        )  # SLIT_THICKNESS / 2.0)
+        wall_vec_upper = Vector3D(WALL_THICKNESS, WALL_THICKNESS, SLIT_THICKNESS / 2.0)
 
         outer_lower = Point3D(-housing_width / 2, -housing_height / 2, -housing_depth)
         outer_upper = Point3D(housing_width / 2, housing_height / 2, 0)
@@ -225,10 +222,7 @@ class Bolometer(object):
             name="Housing with Aperture",
         )
 
-        # if self.info["NAME"] in ["SX45F_UP", "SX45F_DOWN"]:
-        camera_housing.material = AbsorbingSurface()
-        # else:
-        #    camera_housing.material = NullMaterial()
+        camera_housing.material = NullMaterial()  # AbsorbingSurface() NullMaterial
 
         # Attach the finished housing to the camera
         bolometer_camera.camera_geometry = camera_housing
@@ -443,12 +437,12 @@ class Bolometer(object):
         Can add it in the future, so I just left the commented-out code here.
         """
 
-        self.raytraced_etendues = []
-        self.raytraced_errors = []
+        self.etendues = []
+        self.etendues_error = []
         analytic_etendues = []
         for foil in self.bolometer_camera:
             raytraced_etendue, raytraced_error = foil.calculate_etendue(
-                ray_count=100_000
+                ray_count=10_000
             )
             Adet = foil.x_width * foil.y_width
             Aslit = foil.slit.dx * foil.slit.dy
@@ -463,11 +457,11 @@ class Bolometer(object):
                     foil.name, raytraced_etendue, raytraced_error, analytic_etendue
                 )
             )
-            self.raytraced_etendues.append(raytraced_etendue)
-            self.raytraced_errors.append(raytraced_error)
+            self.etendues.append(raytraced_etendue)
+            self.etendues_error.append(raytraced_error)
             analytic_etendues.append(analytic_etendue)
-        self.etendues = analytic_etendues
-        self.etendues_error = np.array(analytic_etendues) * 0.1
+        self.etendues_analytic = analytic_etendues
+        self.etendues_analytic_error = np.array(analytic_etendues) * 0.1
 
     def change_camera_material(self, material=""):
         """

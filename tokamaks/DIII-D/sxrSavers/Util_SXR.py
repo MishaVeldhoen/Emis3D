@@ -5,13 +5,19 @@ Definitions to grab, store, and filter SXR data on DIII-D
 """
 
 from os.path import dirname, join, realpath
-
+import os
+import sys
 import h5py
 import numpy as np
 import scipy.constants
+from pathlib import Path
 
 FILE_PATH = dirname(realpath(__file__))
 PARENT_DIRECTORY = dirname(FILE_PATH)
+
+
+EMIS3D_SXR_CALIB_DIRECTORY = pathFileName = join(FILE_PATH, "sxrCalibs")
+print(EMIS3D_SXR_CALIB_DIRECTORY)
 
 
 def _get_calib_info(ShotNumber, ArrayName=None):
@@ -32,8 +38,9 @@ def _get_calib_info(ShotNumber, ArrayName=None):
         # Filter widths for specific shot ranges
 
         # Figure out what file to grab
+        path_calib = None
         if ArrayName.upper() in ["SX90RP1F", "SX90RM1F"]:
-            path_calib = join(PARENT_DIRECTORY, "SXRsettingsPA.dat")
+            path_calib = join(EMIS3D_SXR_CALIB_DIRECTORY, "SXRsettingsPA.dat")
             PA = ArrayName.upper() in ["SX90RP1F", "SX90RM1F"]
             P = ArrayName.upper() in ["SX90RP1F"]
             open_file = True
@@ -73,9 +80,9 @@ def _get_calib_info(ShotNumber, ArrayName=None):
             open_file = False
 
         else:
-            raise Exception("Not a valid array!")
+            raise Exception("Not a valid array!", ArrayName)
 
-        if open_file:
+        if open_file and path_calib is not None:
             # Read the file
             file_data = open(path_calib, "r")
 
@@ -476,7 +483,7 @@ def filter_data(data, filter_type="hanning", window_len=21):
 
 
     """
-    
+
     try:
         # print("filtering data using " + filter_type)
 
@@ -491,7 +498,7 @@ def filter_data(data, filter_type="hanning", window_len=21):
 
         temp_data2 = np.convolve(w / w.sum(), temp_data, mode="valid")
 
-        data_filtered =  temp_data2[
+        data_filtered = temp_data2[
             int((window_len - 1) / 2) : int(
                 temp_data2.shape[0] - ((window_len - 1) / 2)
             )
@@ -514,17 +521,10 @@ def filter_data(data, filter_type="hanning", window_len=21):
         temp_err2 = np.sqrt(np.convolve(w / w.sum(), temp_err**2, mode="valid"))
 
         data_filtered_error = temp_err2[
-                int((window_len - 1) / 2) : int(
-                    temp_err2.shape[0] - ((window_len - 1) / 2)
-                )
-            ]
+            int((window_len - 1) / 2) : int(temp_err2.shape[0] - ((window_len - 1) / 2))
+        ]
         return data_filtered, data_filtered_error
-    
+
     except:
         print("The signal couldn't be filtered! Skipping def filter_data.")
         return [], []
-
-
-
-
-        

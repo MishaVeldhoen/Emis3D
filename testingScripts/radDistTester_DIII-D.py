@@ -20,7 +20,7 @@ from main.Tokamak import Tokamak
 from main.Util import config_loader
 
 tokamakName = "DIII-D"
-configFileName = "elongatedRing_config.yaml"  # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"  #
+configFileName = "sqaureTube_config.yaml"  # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"  #
 elongation = 0.1
 polSigma = 0.1
 rotationAngle = 0.0
