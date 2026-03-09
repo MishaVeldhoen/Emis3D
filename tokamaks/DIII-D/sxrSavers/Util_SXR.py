@@ -17,7 +17,6 @@ PARENT_DIRECTORY = dirname(FILE_PATH)
 
 
 EMIS3D_SXR_CALIB_DIRECTORY = pathFileName = join(FILE_PATH, "sxrCalibs")
-print(EMIS3D_SXR_CALIB_DIRECTORY)
 
 
 def _get_calib_info(ShotNumber, ArrayName=None):
@@ -195,7 +194,7 @@ def get_calibration(ShotNumber, ArrayName=None, effective_response=0.12, etendue
                     ]
                 )
 
-            if info["ARRAY"] == "SX90RP1F":
+            if info["ARRAY"] in ["SX90RP1F"]:
                 info["ETENDUE"] = np.array(
                     [
                         1.845,

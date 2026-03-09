@@ -9,10 +9,10 @@ CHANNEL_TAGS: ['DISRADU16', 'DISRADU17', 'DISRADU18','DISRADU19', 'DISRADU20', '
                'DISRADU28', 'DISRADU29', 'DISRADU30']
 
 BUILD_TYPE: "FROM PRIMITIVES" # Build the camera from primitives, not using a CAD file
-SLIT_WIDTH: 0.003  # 3 mm slit (circular)
-SLIT_HEIGHT: 0.003 # 3 mm slit (circular)
-FOIL_WIDTH: 0.005  # width of the diode
-FOIL_HEIGHT: 0.002  # height of the diode
+SLIT_WIDTH: 0.0002  # 200 um pinhole (circular)
+SLIT_HEIGHT: 0.0002 # 200 um pinhole (circular)
+FOIL_WIDTH: 0.002  # width of the diode
+FOIL_HEIGHT: 0.005  # height of the diode
 FOIL_CORNER_CURVATURE: 0.0005
 SLIT_SENSOR_SEPARATION: 0.0305  # 2.98 cm between the slit and the diode array
 FOIL_SEPARATION: 0.00212  # 2.12 mm between diodes

@@ -146,7 +146,7 @@ class Bolometer(object):
         # --- Constants from the configuration file
         SLIT_WIDTH = self.info["SLIT_WIDTH"]
         SLIT_HEIGHT = self.info["SLIT_HEIGHT"]
-        SLIT_THICKNESS = 0.0005
+        SLIT_THICKNESS = 50.0e-6
         FOIL_WIDTH = self.info["FOIL_WIDTH"]
         FOIL_HEIGHT = self.info["FOIL_HEIGHT"]
         FOIL_CORNER_CURVATURE = self.info["FOIL_CORNER_CURVATURE"]
@@ -452,13 +452,15 @@ class Bolometer(object):
             )
             distance = foil.centre_point.vector_to(foil.slit.centre_point).length
             analytic_etendue = Adet * Aslit * costhetadet * costhetaslit / distance**2
+            """
             print(
                 "{} raytraced etendue: {:.4g} +- {:.1g} analytic: {:.4g}".format(
                     foil.name, raytraced_etendue, raytraced_error, analytic_etendue
                 )
             )
-            self.etendues.append(raytraced_etendue)
-            self.etendues_error.append(raytraced_error)
+            """
+            self.etendues.append(raytraced_etendue.item())
+            self.etendues_error.append(raytraced_error.item())
             analytic_etendues.append(analytic_etendue)
         self.etendues_analytic = analytic_etendues
         self.etendues_analytic_error = np.array(analytic_etendues) * 0.1

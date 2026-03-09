@@ -1,4 +1,4 @@
-# sxrDIII-DEtendueComparison.py
+# sxrJETEtendueComparison.py
 """
 Calculates the etendue with Emis3D and compares it to the measured values
 """
@@ -39,7 +39,7 @@ if tok.info is not None:
             n_ = "SXR45"
         else:
             n_ = b_
-        etendue_[b_] = Util_SXR.get_calibration(184407, ArrayName=n_)
+        etendue_[b_] = Util_SXR.get_calibration(160606, ArrayName=n_)
 
 # --- Combine the calculated etendues
 e_ = {}
@@ -68,7 +68,7 @@ for b_ in tok.bolometers:
 
     if chan is not None:
         e_[b_.info["GROUP_NAME"]]["chan"] += chan.tolist()
-        e_[b_.info["GROUP_NAME"]]["etendue"] += b_.etendues
+        e_[b_.info["GROUP_NAME"]]["etendue"] += b_.etendues_analytic  # b_.etendues
 
 
 plt.ion()
@@ -91,7 +91,9 @@ if tok.info is not None:
         f_ = f.add_subplot(num_rows, num_columns, plot_count)
         tok._plot_first_wall(f_)
         tok._plot_bolometers(
-            f_, boloGroupName=boloGroup, plot_chord_info=True, plot_etendue=["SX90PF07"]
+            f_,
+            boloGroupName=boloGroup,
+            plot_chord_info=True,
         )
 
     # --- Plot the etendues
@@ -105,12 +107,11 @@ if tok.info is not None:
         print(f"{boloGroup} Normalization factor: {norm:.2e}, calculated / measured")
         f_.scatter(
             e_[boloGroup]["chan"],
-            np.array(e_[boloGroup]["etendue"]),
+            np.array(e_[boloGroup]["etendue"]) * norm,
             color="red",
             label="Calculated",
         )
         f_.set_title(boloGroup)
-        f_.legend()
 
     plt.tight_layout()
     plt.show()

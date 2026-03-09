@@ -45,7 +45,7 @@ The camera is constructed with the slit plane at z = 0, facing in the positive z
 """
 
 # Camera is built in the diagnostics class
-if True:
+if False:
     t = Tokamak(
         tokamakName="DIII-D",
         mode="Analysis",
@@ -152,7 +152,7 @@ if True:
 
 
 # Building the camera here
-if False:
+if True:
     world = World()
     # --- Convenient constants
     XAXIS = Vector3D(1, 0, 0)
@@ -335,7 +335,7 @@ if False:
                 if debug:
 
                     foil_center = foil.centre_point
-                    slit_center = slit.to_root() * slit.centre_point
+                    slit_center = slit.centre_point
 
                     separation = np.sqrt(
                         (foil_center.x - slit_center.x) ** 2
@@ -344,7 +344,7 @@ if False:
                     )
 
                     print("\n--- FOIL to SLIT SEPARATION ---")
-                    print(f"Center-to-center distance: {separation:.6f} m")
+                    print(f"Center-to-center distance: {separation * 100.0:.2f} cm")
 
                 # Get corners
                 foil_corners = get_rectangle_corners(foil)
