@@ -229,6 +229,8 @@ class Tokamak(object):
             print("No tokamak information loaded, cannot continue!")
             return
 
+        self.cherab_objects = {}
+
         # Building a closed universe
         if hasattr(self, "wall") and load_stl == False:
             if self.wall is not None:
@@ -263,7 +265,6 @@ class Tokamak(object):
                     radius=maxR + 0.2,
                     height=height + 0.2,
                     name="Outer wall",
-                    material=NullMaterial(),
                 )
 
                 # --- Inner wall
@@ -273,10 +274,9 @@ class Tokamak(object):
                     radius=minR - 0.2,
                     height=height + 0.2,
                     name="Inner wall",
-                    material=NullMaterial(),
                 )
 
-                wall = Subtract(
+                self.cherab_objects["Tokamak Wall"] = Subtract(
                     cylinder_outer,
                     cylinder_inner,
                     material=AbsorbingSurface(),  # Do NOT CHANGE THIS to a NullSurface, otherwise the foil.observe will not work properly
@@ -300,7 +300,7 @@ class Tokamak(object):
                     name="Inner emission wall",
                 )
 
-                emiss_surface = Subtract(
+                self.cherab_objects["Emission Surface"] = Subtract(
                     emiss_outer,
                     emiss_inner,
                     name="Emission Surface",
@@ -414,9 +414,7 @@ class Tokamak(object):
             if val.name == surfaceName:
                 val.material = NullMaterial()
 
-    def _change_emission_surface_material(
-        self, material, name="Emission Surface"
-    ) -> None:
+    def _change_World_surface_material(self, material, name="Emission Surface") -> None:
         """
         Changes the material of the emission surface, used for testing purposes
         """
@@ -614,7 +612,7 @@ class Tokamak(object):
         """
 
         # --- Change the inner wall to an absorbing surface, so the chords have something intersect with
-        self._change_emission_surface_material(AbsorbingSurface(), name="Tokamak Wall")
+        self._change_World_surface_material(AbsorbingSurface(), name="Tokamak Wall")
 
         # --- Make sure self.info is initiated
         if self.info is None:
@@ -1063,13 +1061,35 @@ class Tokamak(object):
                 self.cameras[ii]["detector_center"].vector_to(Point3D(x, y, z))
             ).normalise()  # inward pointing
 
-    def calc_etendues(self):
+    def _change_object_parent(self, parent=None):
+        """
+        When calculating the Etendue's for each bolometer,
+        the parent for each other object should be set to None
+        """
+        for val in self.cherab_objects:
+            self.cherab_objects[val].parent = parent
+
+    def calc_etendues(self) -> None:
         """
         Sets the wall material to NullMaterial prior to calling calc_etendues for each bolometer
-
         """
 
-        self._change_emission_surface_material(NullMaterial(), name="Tokamak Wall")
+        # --- We need to remove each object that is not the specific bolometer from the scene
+        self._change_object_parent(parent=None)
+
+        # --- Remove each bolometer from the world
         for bolo in self.bolometers:
-            bolo.calc_etendues()
-        self._change_emission_surface_material(AbsorbingSurface(), name="Tokamak Wall")
+            bolo._change_parent(value=None)
+
+        # --- Calculate etendue for each bolometer
+        for bolo in self.bolometers:
+            bolo._change_parent(value=self.world)
+            bolo._calc_etendues()
+            bolo._change_parent(value=None)
+
+        # --- Add each bolometer from the world
+        for bolo in self.bolometers:
+            bolo._change_parent(value=self.world)
+
+        # --- Unbuild the tokamak
+        self._change_object_parent(parent=self.world)

@@ -316,6 +316,52 @@ class Bolometer(object):
 
         self.bolometer_camera = bolometer_camera
 
+    def _calc_etendues(self) -> None:
+        """
+        Calculate the etendue based on the geometery of the camera.
+        Taken from the Cherab demo:
+        https://www.cherab.info/demonstrations/bolometry/calculate_etendue.html
+
+        Raytracing is not used here, since we did not load any CAD files for the bolometer.
+
+        Can add it in the future, so I just left the commented-out code here.
+        """
+
+        self.etendues = []
+        self.etendues_error = []
+        analytic_etendues = []
+        for foil in self.bolometer_camera:
+            raytraced_etendue, raytraced_error = foil.calculate_etendue(
+                ray_count=10_000
+            )
+            Adet = foil.x_width * foil.y_width
+            Aslit = foil.slit.dx * foil.slit.dy
+            costhetadet = foil.sightline_vector.normalise().dot(foil.normal_vector)
+            costhetaslit = foil.sightline_vector.normalise().dot(
+                foil.slit.normal_vector
+            )
+            distance = foil.centre_point.vector_to(foil.slit.centre_point).length
+            analytic_etendue = Adet * Aslit * costhetadet * costhetaslit / distance**2
+            """
+            print(
+                "{} raytraced etendue: {:.4g} +- {:.1g} analytic: {:.4g}".format(
+                    foil.name, raytraced_etendue, raytraced_error, analytic_etendue
+                )
+            )
+            """
+            self.etendues.append(raytraced_etendue.item())
+            self.etendues_error.append(raytraced_error.item())
+            analytic_etendues.append(analytic_etendue)
+        self.etendues_analytic = analytic_etendues
+        self.etendues_analytic_error = (np.array(analytic_etendues) * 0.1).tolist()
+
+    def _change_parent(self, value=None) -> None:
+        """
+        Either sets the self.bolometer_camera.parent to None or self.world
+        """
+
+        self.bolometer_camera.parent = value
+
     def load_kb5_camera(self, camera_id, parent=None) -> None:
         """
         Loads the KB5 camera configuration from the locally stored csv file. The csv file can
@@ -425,45 +471,6 @@ class Bolometer(object):
             bolometer_camera.add_foil_detector(foil)
 
         self.bolometer_camera = bolometer_camera
-
-    def calc_etendues(self) -> None:
-        """
-        Calculate the etendue based on the geometery of the camera.
-        Taken from the Cherab demo:
-        https://www.cherab.info/demonstrations/bolometry/calculate_etendue.html
-
-        Raytracing is not used here, since we did not load any CAD files for the bolometer.
-
-        Can add it in the future, so I just left the commented-out code here.
-        """
-
-        self.etendues = []
-        self.etendues_error = []
-        analytic_etendues = []
-        for foil in self.bolometer_camera:
-            raytraced_etendue, raytraced_error = foil.calculate_etendue(
-                ray_count=10_000
-            )
-            Adet = foil.x_width * foil.y_width
-            Aslit = foil.slit.dx * foil.slit.dy
-            costhetadet = foil.sightline_vector.normalise().dot(foil.normal_vector)
-            costhetaslit = foil.sightline_vector.normalise().dot(
-                foil.slit.normal_vector
-            )
-            distance = foil.centre_point.vector_to(foil.slit.centre_point).length
-            analytic_etendue = Adet * Aslit * costhetadet * costhetaslit / distance**2
-            """
-            print(
-                "{} raytraced etendue: {:.4g} +- {:.1g} analytic: {:.4g}".format(
-                    foil.name, raytraced_etendue, raytraced_error, analytic_etendue
-                )
-            )
-            """
-            self.etendues.append(raytraced_etendue.item())
-            self.etendues_error.append(raytraced_error.item())
-            analytic_etendues.append(analytic_etendue)
-        self.etendues_analytic = analytic_etendues
-        self.etendues_analytic_error = (np.array(analytic_etendues) * 0.1).tolist()
 
     def change_camera_material(self, material=""):
         """

@@ -320,7 +320,10 @@ class RadDist(ABC):
 
     def bolos_observe(self) -> None:
         """
-        Observes the radiation function for each bolometer
+        Observes the radiation function for each bolometer.
+
+        Example found here:
+        https://www.cherab.info/demonstrations/bolometry/observing_radiation_function.html#bolometer-observing-radiation
         """
         # Should be Power or Radiance
         units = self.info["units"]
@@ -349,6 +352,10 @@ class RadDist(ABC):
         # --- Assign sightline resolution, number of processors to be used
         self._update_bolometer_properties()
 
+        # --- Calculate etendue's if asking for radiance
+        if units == "Radiance":
+            self.tokamak.calc_etendues()
+
         # --- Populate world with emitter, this cannot be a seperate definition!
         # unless you include the emitter.material changes in that def as well!
         if self.tokamak.wall is None:
@@ -357,7 +364,7 @@ class RadDist(ABC):
             )
 
         emitter = None
-        # --- Add the emitter to the tokamak wall
+        # --- Add the emitter to the Emission Surface
         for val in self.tokamak.world.children:
             if val.name == "Emission Surface":
                 emitter = val
@@ -384,11 +391,6 @@ class RadDist(ABC):
                 observeVal_error = []
                 ch_order = []
 
-                # --- Calculate etendue's if asking for radiance
-                if units == "Radiance":
-                    if not hasattr(bolo_, "etendues"):
-                        bolo_.calc_etendues()
-
                 # --- Set the units in the foil prior to observing the world
                 for jj, foil in enumerate(bolo_.bolometer_camera):
                     ans = 0
@@ -397,19 +399,54 @@ class RadDist(ABC):
                         foil.units = units
                         foil.observe()
                         if units == "Radiance":
-                            fractional_solid_angle = (
-                                bolo_.etendues[jj] / foil.sensitivity
-                            )
-                            ans = foil.pipelines[0].value.mean / fractional_solid_angle
-                            ans_error = (
-                                np.hypot(
-                                    foil.pipelines[0].value.error()
-                                    / foil.pipelines[0].value.mean,
-                                    bolo_.etendues_error[jj] / bolo_.etendues[jj],
+                            # sightline = foil.as_sightline()
+                            # sightline.observe()
+                            # ans = sightline.pipelines[0].value.mean
+
+                            # --- Below is a calculation of the incident radiance directly,
+                            # renormalising for comparison with the sightline
+                            try:
+                                # --- Check for divide by zero values
+                                if (
+                                    foil.sensitivity == 0
+                                    or foil.pipelines[0].value.mean == 0
+                                    or bolo_.etendues[jj] == 0
+                                ):
+                                    ans = 0
+                                    ans_error = 0
+                                else:
+                                    fractional_solid_angle = (
+                                        bolo_.etendues[jj] / foil.sensitivity
+                                    )
+                                    ans = (
+                                        foil.pipelines[0].value.mean
+                                        / fractional_solid_angle
+                                    )
+                                    ans_error = (
+                                        np.hypot(
+                                            foil.pipelines[0].value.error()
+                                            / foil.pipelines[0].value.mean,
+                                            bolo_.etendues_error[jj]
+                                            / bolo_.etendues[jj],
+                                        )
+                                        * ans
+                                    )
+                            except Exception as e:
+                                print(
+                                    f"An error occured while observing the radiance, {e}"
                                 )
-                                * ans
-                            )
+
+                                print(f"Etendue {bolo_.etendues[jj]}")
+                                print(f"Sensitivity {foil.sensitivity}")
+                                print(
+                                    f"foil.pipelines[0].value.mean {foil.pipelines[0].value.mean}"
+                                )
+                                print(
+                                    f"foil.pipelines[0].value.error() {foil.pipelines[0].value.error()}"
+                                )
+
                         elif units == "Power":
+
                             ans = foil.pipelines[0].value.mean
                             ans_error = foil.pipelines[0].value.error()
 

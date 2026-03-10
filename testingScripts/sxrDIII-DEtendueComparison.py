@@ -26,7 +26,10 @@ tok = Tokamak(
     loadBolometers=True,
 )
 
+
 tok.calc_etendues()
+
+
 info = Util_SXR._get_calib_info(184407, ArrayName="SXR45")
 etendue_ = {}
 if tok.info is not None:
