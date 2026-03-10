@@ -47,8 +47,15 @@ for b_ in tok.bolometers:
     chan = None
     if b_.info["GROUP_NAME"] not in e_:
         e_[b_.info["GROUP_NAME"]] = {}
-        e_[b_.info["GROUP_NAME"]]["chan"] = []
-        e_[b_.info["GROUP_NAME"]]["etendue"] = []
+        for item in [
+            "chan",
+            "etendue",
+            "etendue_error",
+            "etendue_analytic",
+            "etendue_analytic_error",
+        ]:
+            e_[b_.info["GROUP_NAME"]][item] = []
+
     if b_.name == "SX90PF_UP":
         chan = np.arange(17, 33)
     elif b_.name == "SX90PF_DOWN":
@@ -69,20 +76,17 @@ for b_ in tok.bolometers:
     if chan is not None:
         e_[b_.info["GROUP_NAME"]]["chan"] += chan.tolist()
         e_[b_.info["GROUP_NAME"]]["etendue"] += b_.etendues
+        e_[b_.info["GROUP_NAME"]]["etendue_error"] += b_.etendues_error
+        e_[b_.info["GROUP_NAME"]]["etendue_analytic"] += b_.etendues_analytic
+        e_[b_.info["GROUP_NAME"]][
+            "etendue_analytic_error"
+        ] += b_.etendues_analytic_error
 
 
 plt.ion()
 
-"""
-plt.figure()
-norm = np.nanmax(E[active]) / np.nanmax(np.array(e_["SX45F"]["etendue"]))
-plt.scatter(e_["SX45F"]["chan"], np.array(e_["SX45F"]["etendue"]) * norm, marker="s")
-chan = np.arange(1, 13)
-plt.scatter(chan, E[active], marker="^")
-"""
 
 # --- Plot each individual bolometer
-
 if tok.info is not None:
     boloGroups = tok.info["Bolometer Groups"]
     bolometers = tok.bolometers
@@ -98,7 +102,10 @@ if tok.info is not None:
         f_ = f.add_subplot(num_rows, num_columns, plot_count)
         tok._plot_first_wall(f_)
         tok._plot_bolometers(
-            f_, boloGroupName=boloGroup, plot_chord_info=True, plot_etendue=["SX90PF07"]
+            f_,
+            boloGroupName=boloGroup,
+            plot_chord_info=True,
+            plot_etendue=["SX90PF07", "SX90MF07", "DISRADU07", "SX45F07"],
         )
 
     # --- Plot the etendues
@@ -110,11 +117,26 @@ if tok.info is not None:
         f_.scatter(chan, eten_, marker="s", color="black", label="Measured")
         norm = np.nanmax(eten_) / np.nanmax(np.array(e_[boloGroup]["etendue"]))
         print(f"{boloGroup} Normalization factor: {norm:.2e}, calculated / measured")
-        f_.scatter(
+        f_.errorbar(
             e_[boloGroup]["chan"],
             np.array(e_[boloGroup]["etendue"]),
-            color="red",
-            label="Calculated",
+            yerr=np.array(np.array(e_[boloGroup]["etendue_error"])),
+            fmt="-o",
+            color="steelblue",  # Color of the data line/markers
+            ecolor="gray",  # Color of the error bars
+            elinewidth=2,  # Line width of the error bars
+            capsize=5,  # Cap size
+            capthick=2,  # Cap thickness
+            ms=7,
+            label="Raysect ray-traced",
+            linestyle="none",
+        )
+        f_.scatter(
+            e_[boloGroup]["chan"],
+            np.array(e_[boloGroup]["etendue_analytic"]),
+            color="tab:red",
+            label="Raysect Analytic",
+            marker="^",
         )
         f_.set_title(boloGroup)
         f_.legend()

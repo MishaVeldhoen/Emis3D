@@ -463,7 +463,7 @@ class Bolometer(object):
             self.etendues_error.append(raytraced_error.item())
             analytic_etendues.append(analytic_etendue)
         self.etendues_analytic = analytic_etendues
-        self.etendues_analytic_error = np.array(analytic_etendues) * 0.1
+        self.etendues_analytic_error = (np.array(analytic_etendues) * 0.1).tolist()
 
     def change_camera_material(self, material=""):
         """
