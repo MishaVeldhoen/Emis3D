@@ -27,7 +27,7 @@ tok = Tokamak(
 )
 
 tok.calc_etendues()
-
+info = Util_SXR._get_calib_info(184407, ArrayName="SXR45")
 etendue_ = {}
 if tok.info is not None:
     for b_ in tok.info["Bolometer Groups"]:
@@ -73,6 +73,13 @@ for b_ in tok.bolometers:
 
 plt.ion()
 
+"""
+plt.figure()
+norm = np.nanmax(E[active]) / np.nanmax(np.array(e_["SX45F"]["etendue"]))
+plt.scatter(e_["SX45F"]["chan"], np.array(e_["SX45F"]["etendue"]) * norm, marker="s")
+chan = np.arange(1, 13)
+plt.scatter(chan, E[active], marker="^")
+"""
 
 # --- Plot each individual bolometer
 
