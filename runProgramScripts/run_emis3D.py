@@ -2,6 +2,9 @@
 """
 Code that runs emis3D in parallel
 
+Example call:
+python run_emis3D.py
+
 Written by JLH Sept. 2025
 """
 

@@ -66,7 +66,7 @@ Biggest Issues:
     - Add a tomography radDist mapping function (like BOLT?)
 2. Implement a toroidal distribution function that is not symmetric around the injection loction
 3. Re-vist how error is calculated for the observed data
-4. Remove flammkuchen dependency
+
 
 """
 
@@ -91,7 +91,7 @@ from main.radDistFitting import RadDistFitting
 from main.radDist import Helical, ElongatedRing
 from scipy.integrate import simpson
 import time
-import flammkuchen as fl
+import dill
 
 
 class Emis3D:
@@ -161,7 +161,7 @@ class Emis3D:
                 else:
             """
 
-            # self._minimize_radDists(evalTime=evalTime)
+            self._minimize_radDists(evalTime=evalTime)
             print(f"Fitting done in {time.time() - t_start:.2f} seconds")
             self._post_process_fit_arrangement(evalTime=evalTime)
             self._post_process_radiation_distribution(evalTime=evalTime)
@@ -975,9 +975,9 @@ class Emis3D:
         info = rad_.info
         # --- Create the radDist
         if info["distType"] == "helical":
-            radDist_ = Helical(setFieldLine=False)
+            radDist_ = Helical(config=rad_.info, setFieldLine=False)
         elif info["distType"] == "elongatedRing":
-            radDist_ = ElongatedRing()
+            radDist_ = ElongatedRing(config=rad_.info)
         else:
             print(f"self_rebuild_radDist() only supports Helical or ElongatedRing")
             return
@@ -1449,14 +1449,30 @@ class Emis3D:
 
         # --- Plot the radiation behavior
         tpf_plot = f.add_subplot(2, num_columns, count_ + 1)
+        y_data = self.bestFits[evalTime]["powerPerBin"]["total"]["powerPerBin"]
+        scale = np.floor(np.log10(np.nanmax(y_data)))
         tpf_plot.plot(
             np.rad2deg(self.bestFits[evalTime]["powerPerBin"]["total"]["phi"]),
-            self.bestFits[evalTime]["powerPerBin"]["total"]["powerPerBin"],
+            y_data / 10**scale,
             color="black",
             linewidth=2.0,
         )
+        tpf_plot.set_ylim(
+            np.floor(
+                np.nanmin(
+                    self.bestFits[evalTime]["powerPerBin"]["total"]["powerPerBin"]
+                    / 10**scale
+                )
+            ),
+            np.ceil(
+                np.nanmax(
+                    self.bestFits[evalTime]["powerPerBin"]["total"]["powerPerBin"]
+                    / 10**scale
+                )
+            ),
+        )
         tpf_plot.set_xlabel("phi [degrees]")
-        tpf_plot.set_ylabel("radiation [arb]")
+        tpf_plot.set_ylabel(f"radiation [$10^{scale}$ arb]")
         tpf_plot.set_title(
             f"time = {evalTime:.1f} ms, TPF: {self.bestFits[float(evalTime)]["powerPerBin"]["total"]["toroidal_peaking_factor"]:.2f}"
         )
@@ -1509,6 +1525,11 @@ class Emis3D:
         """
         Saves the best fits
         """
+
+        def save_results(filename, data):
+            with open(filename, "wb") as f:
+                dill.dump(data, f)
+
         if self.info is not None and "shot" in self.info and "tokamakName" in self.info:
             keys = list(self.bestFits.keys())
             if len(keys) > 1:
@@ -1528,7 +1549,8 @@ class Emis3D:
             print(pathFileName)
 
             dict_ = {"fit_data": self.fitData, "bestFits": self.bestFits}
-            fl.save(pathFileName, dict_)
+
+            save_results(pathFileName, dict_)
 
             print(f"Best fits and fitData saved to: {pathFileName}")
 
@@ -1536,9 +1558,15 @@ class Emis3D:
         """
         Loads the best fits to do analysis
         """
+
+        def load_results(filename):
+            with open(filename, "rb") as f:
+                return dill.load(f)
+
         self.bestFits = {}
         self.fitData = {}
-        temp = fl.load(path)
+
+        temp = load_results(path)
         if isinstance(temp, dict):
             for key in list(temp.keys()):
                 for evalTime in temp[key]:
