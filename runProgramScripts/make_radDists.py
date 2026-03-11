@@ -125,7 +125,10 @@ if __name__ == "__main__":
                 for polSigma in polSigmas:
                     # --- Split the rzArray to conserve memory during the process pool executor,
                     # try to have it split up evenly between the numbe of processors used
-                    num_split = np.floor((rzArray.shape[0] / (numProcessors - 1.0)))
+                    num_split = 1
+                    if rzArray.shape[0] > (numProcessors - 1.0):
+                        num_split = np.floor((rzArray.shape[0] / (numProcessors - 1.0)))
+
                     rzArray_split = np.array_split(rzArray, num_split)
                     for rz in rzArray_split:
                         # --- Skip rotation angle if the elongation and polSigma are equal (aka a circle)
