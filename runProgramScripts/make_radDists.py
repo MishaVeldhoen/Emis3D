@@ -85,28 +85,32 @@ if __name__ == "__main__":
 
     numProcessors = int(config["numProcessors"])
 
+    # --- Need to load the tokamak to get wall information, this tokamak class will not be passed to the radDists
+    tok = Tokamak(
+        tokamakName=tokamakName,
+        mode="Analysis",
+        reflections=False,
+        eqFileName=config["eqFileName"],
+    )
+    rzArray = None
+
     # --- Load the tokamak if rArray and zArray are blank in the configuration file
     if len(config["GRID"]["rLimits"]) == 0 or len(config["GRID"]["zLimits"]) == 0:
-        # --- Need to load the tokamak to get wall information, this tokamak class will not be passed to the radDists
-        tok = Tokamak(
-            tokamakName=tokamakName,
-            mode="Analysis",
-            reflections=False,
-            eqFileName=config["eqFileName"],
-        )
         rzArray = Util_radDist.callRZGridTokamak(
             tok,
             numRgrid=config["GRID"]["NumRStartGrid"],
             numZgrid=config["GRID"]["NumZStartGrid"],
         )
+
     else:
-        rzArray = Util_radDist.createRZGrid(
-            rLimits=config["GRID"]["rLimits"],
-            zLimits=config["GRID"]["zLimits"],
-            numRgrid=config["GRID"]["NumRStartGrid"],
-            numZgrid=config["GRID"]["NumZStartGrid"],
-            wallcurve=None,
-        )
+        if tok.wall is not None:
+            rzArray = Util_radDist.createRZGrid(
+                rLimits=config["GRID"]["rLimits"],
+                zLimits=config["GRID"]["zLimits"],
+                numRgrid=config["GRID"]["NumRStartGrid"],
+                numZgrid=config["GRID"]["NumZStartGrid"],
+                wallcurve=tok.wall["wallcurve"],
+            )
 
     # --- Remove polSigma and elongations from the config file since we don't
     # need to pass all of them to each radDist
@@ -115,43 +119,46 @@ if __name__ == "__main__":
     rotationAngles = config["rotationAngles"].copy()
     del config["polSigmas"], config["elongations"], config["rotationAngles"]
 
-    for rotationAngle in rotationAngles:
-        for elongation in elongations:
-            for polSigma in polSigmas:
-                # --- Split the rzArray to conserve memory during the process pool executor,
-                # try to have it split up evenly between the numbe of processors used
-                num_split = np.floor((rzArray.shape[0] / (numProcessors - 1.0)))
-                rzArray_split = np.array_split(rzArray, num_split)
-                for rz in rzArray_split:
-                    # --- Skip rotation angle if the elongation and polSigma are equal (aka a circle)
-                    # only do the case where the rotationAngle = 0
-                    if elongation == polSigma and rotationAngle > 0.0:
-                        pass
-                    else:
-                        # --- Add stuff to the config, create list of r, z points to solve at
-                        # this elongation and polsigma
-                        config["polSigma"] = polSigma
-                        config["elongation"] = elongation
-                        config["rotationAngle"] = rotationAngle
-                        arg_list = [(val, config) for val in rz]
+    if rzArray is not None:
+        for rotationAngle in rotationAngles:
+            for elongation in elongations:
+                for polSigma in polSigmas:
+                    # --- Split the rzArray to conserve memory during the process pool executor,
+                    # try to have it split up evenly between the numbe of processors used
+                    num_split = np.floor((rzArray.shape[0] / (numProcessors - 1.0)))
+                    rzArray_split = np.array_split(rzArray, num_split)
+                    for rz in rzArray_split:
+                        # --- Skip rotation angle if the elongation and polSigma are equal (aka a circle)
+                        # only do the case where the rotationAngle = 0
+                        if elongation == polSigma and rotationAngle > 0.0:
+                            pass
+                        else:
+                            # --- Add stuff to the config, create list of r, z points to solve at
+                            # this elongation and polsigma
+                            config["polSigma"] = polSigma
+                            config["elongation"] = elongation
+                            config["rotationAngle"] = rotationAngle
+                            arg_list = [(val, config) for val in rz]
 
-                        # --- Start computation in parrallel minus 2 of your processors (so you can actually use your computer)
-                        if config["distType"] == "Helical":
-                            with ProcessPoolExecutor(
-                                max_workers=numProcessors
-                            ) as executor:
-                                # --- Explicitly consume results so iterator is cleared
-                                for _ in executor.map(
-                                    Util_radDist.radDist_Helical_parallel, arg_list
-                                ):
-                                    pass
-                        elif config["distType"] == "ElongatedRing":
-                            with ProcessPoolExecutor(
-                                max_workers=numProcessors
-                            ) as executor:
-                                # --- Explicitly consume results so iterator is cleared
-                                for _ in executor.map(
-                                    Util_radDist.radDist_ElongatedRing_parallel,
-                                    arg_list,
-                                ):
-                                    pass
+                            # --- Start computation in parrallel minus 2 of your processors (so you can actually use your computer)
+                            if config["distType"] == "Helical":
+                                with ProcessPoolExecutor(
+                                    max_workers=numProcessors
+                                ) as executor:
+                                    # --- Explicitly consume results so iterator is cleared
+                                    for _ in executor.map(
+                                        Util_radDist.radDist_Helical_parallel, arg_list
+                                    ):
+                                        pass
+                            elif config["distType"] == "ElongatedRing":
+                                with ProcessPoolExecutor(
+                                    max_workers=numProcessors
+                                ) as executor:
+                                    # --- Explicitly consume results so iterator is cleared
+                                    for _ in executor.map(
+                                        Util_radDist.radDist_ElongatedRing_parallel,
+                                        arg_list,
+                                    ):
+                                        pass
+    else:
+        print(f"Problem making the rzArray")
