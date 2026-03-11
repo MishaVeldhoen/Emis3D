@@ -679,7 +679,7 @@ class Helical(RadDist):
 
         # --- Create the field line to trace
         if setFieldLine:
-            str_ = f"Building Helical radDist using a polSigma of {self.info['polSigma']:.2f},"
+            str_ = f"Building Helical radDist using a polSigma of {self.info['polSigma']:.2f} elongation of {self.info['elongation']:.2f},"
             str_ += f" starting at R = {startR:.2f}m and z = {startZ:.2f}m"
             print(str_)
             self._build_tokamak(

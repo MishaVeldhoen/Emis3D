@@ -22,7 +22,7 @@ from main.Util import config_loader
 tokamakName = "DIII-D"
 configFileName = "helical_config.yaml"  # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"  #
 elongation = 0.4
-polSigma = 0.2
+polSigma = 0.1
 rotationAngle = 0.0
 rzvalues = [2.0, 0.56]
 
