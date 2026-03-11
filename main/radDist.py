@@ -793,7 +793,8 @@ class Helical(RadDist):
 
     def _scaling_factor(self, bolo_info, emissionName=None) -> list:
         """
-        Returns the scaling factor for the bolometer.
+        Returns the scaling factor for the bolometer. This is used when determining
+        the toroidal peaking factor
         """
         numChan = bolo_info["NUM_CHANNELS"]
         phi = np.deg2rad(float(bolo_info["CAMERA_POSITION_R_Z_PHI"][2]))

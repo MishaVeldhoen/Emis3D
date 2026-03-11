@@ -57,7 +57,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------
     # This should be the path after /inputs/{tokamak}/radDists/:
     tokamakName = "DIII-D"
-    configFileName = "184407_injectionLocation_225/helical_config.yaml"
+    configFileName = "elongatedRing_config.yaml"
     # ------------------------------------------------------
     # --- Do not change anything below this line ---
     # ------------------------------------------------------
