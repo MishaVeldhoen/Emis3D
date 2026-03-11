@@ -601,7 +601,12 @@ class Tokamak(object):
                 plt.plot([r1, r2], [z1, z2], linewidth=2, color="tab:red")
 
     def _plot_bolometers(
-        self, ax, boloGroupName, plot_chord_info=False, plot_etendue=[]
+        self,
+        ax,
+        boloGroupName,
+        plot_chord_info=False,
+        plot_etendue=[],
+        legend=False,
     ) -> None:
         """
         Plots the chords for a specific bolometer group
@@ -729,7 +734,8 @@ class Tokamak(object):
                             color="red",
                         )
 
-        ax.legend(loc="upper right")
+        if legend:
+            ax.legend(loc="upper right")
         ax.set_title(boloGroupName)
 
     def get_ave_bolometer_tor_loc(self, boloGroupName):

@@ -94,6 +94,7 @@ if tok.info is not None:
             f_,
             boloGroupName=boloGroup,
             plot_chord_info=True,
+            legend=True,
         )
 
     # --- Plot the etendues

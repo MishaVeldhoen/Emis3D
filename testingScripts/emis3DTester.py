@@ -56,7 +56,7 @@ tpf = []
 t = None
 
 
-evalTime = 2124.0
+evalTime = 2122.0
 
 tokamakName = "DIII-D"
 runConfigName = "184407/184407_runConfig.yaml"
@@ -66,10 +66,10 @@ t = Emis3D.Emis3D(
     tokamakName=tokamakName,
     runConfigName=runConfigName,
     verbose=verbose,
-    initialize=False,
+    initialize=True,
 )
 t._perform_fits(evalTime=evalTime, crossCalib=False)
-
+t._plot_bestFit(evalTime=evalTime, save=False)
 
 """
 t._load_config_file(

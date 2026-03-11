@@ -556,6 +556,7 @@ class RadDist(ABC):
                     boloGroupName=boloGroup,
                     plot_chord_info=True,
                     plot_etendue=plot_etendue,
+                    legend=False,
                 )
 
                 # --- Plot a cross-section of the radDist

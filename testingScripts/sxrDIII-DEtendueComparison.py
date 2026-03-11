@@ -109,6 +109,7 @@ if tok.info is not None:
             boloGroupName=boloGroup,
             plot_chord_info=True,
             plot_etendue=["SX90PF07", "SX90MF07", "DISRADU07", "SX45F07"],
+            legend=True,
         )
 
     # --- Plot the etendues

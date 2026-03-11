@@ -51,7 +51,9 @@ REMINDERS:
 in order to scale them relative to each other. Then you should load the processed data in this program.
 3. This program uses a right-handed coordinate system (positive phi in counter-clockwise direction when looking down).
 So you need to offset your angles by 360 - x from DIII-D coordinates.
-
+4. crossCalib Flag set to True should only be used to find cross-calibration factors between bolometers for a specific shot.
+This is typically done during the current quench, when the radiation is assumed to be axisymmetric. The flag allows for each
+bolometer to have indpendent scaling factors, see the example on how to cross-calibrate uncalibrated bolometers.
 
 
 TODO:
@@ -1350,7 +1352,7 @@ class Emis3D:
         eqFileName = self.bestFits[evalTime]["radDistInfo"]["eqFileName"]
 
         tok = Tokamak(
-            tokamakName="DIII-D",  # self.info["tokamakName"],
+            tokamakName=self.info["tokamakName"],
             mode="Build",
             reflections=False,
             eqFileName=eqFileName,
@@ -1368,15 +1370,14 @@ class Emis3D:
             f_top = f.add_subplot(2, num_columns, count_)
             tok._plot_first_wall(f_top)
             for bolo_ in tok.bolometers:
-                if bolo_.info["GROUP_NAME"] == boloName:
-                    tok._plot_bolometers(f_top, bolo_.name)
+                tok._plot_bolometers(f_top, boloName)
 
-                    # --- Add the radDist plot
-                    phi = np.deg2rad(bolo_.info["CAMERA_POSITION_R_Z_PHI"][2])
-                    if hasattr(self, "bestFits"):
-                        self.bestFits[evalTime]["radDist"].plotCrossSection(
-                            phi=phi, ax=f_top
-                        )
+                # --- Add the radDist plot
+                phi = np.deg2rad(bolo_.info["CAMERA_POSITION_R_Z_PHI"][2])
+                if hasattr(self, "bestFits"):
+                    self.bestFits[evalTime]["radDist"].plotCrossSection(
+                        phi=phi, ax=f_top
+                    )
             f_top.set_title(boloName)
 
         # --- Plot the contour at the injection location
@@ -1535,9 +1536,9 @@ class Emis3D:
             if len(keys) > 1:
                 min = np.min(keys)
                 max = np.max(keys)
-                filename = f"{self.info['shot']}_bestFits_{min:.2f}_to_{max:.2f}.h5"
+                filename = f"{self.info['shot']}_bestFits_{min:.2f}_to_{max:.2f}.dill"
             else:
-                filename = f"{self.info['shot']}_bestFits_{keys[0]:.2f}.h5"
+                filename = f"{self.info['shot']}_bestFits_{keys[0]:.2f}.dill"
 
             pathFileName = join(
                 EMIS3D_INPUTS_DIRECTORY,
