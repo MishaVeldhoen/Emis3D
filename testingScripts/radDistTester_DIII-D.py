@@ -20,11 +20,11 @@ from main.Tokamak import Tokamak
 from main.Util import config_loader
 
 tokamakName = "DIII-D"
-configFileName = "sqaureTube_config.yaml"  # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"  #
-elongation = 0.1
+configFileName = "helical_config.yaml"  # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"  #
+elongation = 0.4
 polSigma = 0.1
 rotationAngle = 0.0
-rzvalues = [1.65, 0.0]
+rzvalues = [2.0, 0.56]
 
 
 # --- Create the radDist using only one point, we don't need to loop over everything

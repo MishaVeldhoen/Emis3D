@@ -229,6 +229,8 @@ class Tokamak(object):
             print("No tokamak information loaded, cannot continue!")
             return
 
+        self.cherab_objects = {}
+
         # Building a closed universe
         if hasattr(self, "wall") and load_stl == False:
             if self.wall is not None:
@@ -266,13 +268,15 @@ class Tokamak(object):
                 )
 
                 # --- Inner wall
+                # NOTE: This should be modified if any bolometers are inside of this radius,
+                # otherwise Raysect will not trace the chords correctly
                 cylinder_inner = Cylinder(
                     radius=minR - 0.2,
                     height=height + 0.2,
                     name="Inner wall",
                 )
 
-                wall = Subtract(
+                self.cherab_objects["Tokamak Wall"] = Subtract(
                     cylinder_outer,
                     cylinder_inner,
                     material=AbsorbingSurface(),  # Do NOT CHANGE THIS to a NullSurface, otherwise the foil.observe will not work properly
@@ -286,23 +290,23 @@ class Tokamak(object):
                 emiss_outer = Cylinder(
                     radius=self.wall["maxr"] + 1.0,
                     height=height,
-                    name="Outer wall",
+                    name="Outer emission wall",
                 )
 
                 # --- Inner wall
                 emiss_inner = Cylinder(
                     radius=self.wall["minr"],
                     height=height,
-                    name="Inner wall",
+                    name="Inner emission wall",
                 )
 
-                emiss_surface = Subtract(
+                self.cherab_objects["Emission Surface"] = Subtract(
                     emiss_outer,
                     emiss_inner,
                     name="Emission Surface",
                     parent=self.world,
                     transform=translate(0, 0, offset),
-                    material=AbsorbingSurface(),
+                    material=NullMaterial(),
                 )
 
         # --- Load the CAD file
@@ -410,7 +414,7 @@ class Tokamak(object):
             if val.name == surfaceName:
                 val.material = NullMaterial()
 
-    def _change_emission_surface_material(self, material) -> None:
+    def _change_World_surface_material(self, material, name="Emission Surface") -> None:
         """
         Changes the material of the emission surface, used for testing purposes
         """
@@ -418,8 +422,12 @@ class Tokamak(object):
             print("No tokamak information loaded, cannot continue!")
             return
 
+        if name not in ["Emission Surface", "Tokamak Wall"]:
+            print("Name must be one of these two: Emission Surface, Tokamak Wall")
+            return
+
         for child in self.world.children:
-            if child.name == "Emission Surface":
+            if child.name == name:
                 child.material = material
 
     def _plot_first_wall(self, ax=None) -> None:
@@ -593,7 +601,12 @@ class Tokamak(object):
                 plt.plot([r1, r2], [z1, z2], linewidth=2, color="tab:red")
 
     def _plot_bolometers(
-        self, ax, boloGroupName, plot_chord_info=False, plot_etendue=[]
+        self,
+        ax,
+        boloGroupName,
+        plot_chord_info=False,
+        plot_etendue=[],
+        legend=False,
     ) -> None:
         """
         Plots the chords for a specific bolometer group
@@ -604,7 +617,7 @@ class Tokamak(object):
         """
 
         # --- Change the inner wall to an absorbing surface, so the chords have something intersect with
-        self._change_emission_surface_material(AbsorbingSurface())
+        self._change_World_surface_material(AbsorbingSurface(), name="Tokamak Wall")
 
         # --- Make sure self.info is initiated
         if self.info is None:
@@ -721,7 +734,8 @@ class Tokamak(object):
                             color="red",
                         )
 
-        ax.legend(loc="upper right")
+        if legend:
+            ax.legend(loc="upper right")
         ax.set_title(boloGroupName)
 
     def get_ave_bolometer_tor_loc(self, boloGroupName):
@@ -1052,3 +1066,36 @@ class Tokamak(object):
             self.cameras[ii]["normal_vector"] = (
                 self.cameras[ii]["detector_center"].vector_to(Point3D(x, y, z))
             ).normalise()  # inward pointing
+
+    def _change_object_parent(self, parent=None):
+        """
+        When calculating the Etendue's for each bolometer,
+        the parent for each other object should be set to None
+        """
+        for val in self.cherab_objects:
+            self.cherab_objects[val].parent = parent
+
+    def calc_etendues(self) -> None:
+        """
+        Sets the wall material to NullMaterial prior to calling calc_etendues for each bolometer
+        """
+
+        # --- We need to remove each object that is not the specific bolometer from the scene
+        self._change_object_parent(parent=None)
+
+        # --- Remove each bolometer from the world
+        for bolo in self.bolometers:
+            bolo._change_parent(value=None)
+
+        # --- Calculate etendue for each bolometer
+        for bolo in self.bolometers:
+            bolo._change_parent(value=self.world)
+            bolo._calc_etendues()
+            bolo._change_parent(value=None)
+
+        # --- Add each bolometer from the world
+        for bolo in self.bolometers:
+            bolo._change_parent(value=self.world)
+
+        # --- Unbuild the tokamak
+        self._change_object_parent(parent=self.world)

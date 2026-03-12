@@ -58,10 +58,20 @@ t = None
 
 evalTime = 2122.0
 
+tokamakName = "DIII-D"
+runConfigName = "184407/184407_runConfig.yaml"
+verbose = True
+
 t = Emis3D.Emis3D(
-    verbose=True,
-    initialize=False,
+    tokamakName=tokamakName,
+    runConfigName=runConfigName,
+    verbose=verbose,
+    initialize=True,
 )
+t._perform_fits(evalTime=evalTime, crossCalib=False)
+t._plot_bestFit(evalTime=evalTime, save=False)
+
+"""
 t._load_config_file(
     tokamakName="DIII-D",
     runConfigName="184407/184407_runConfig.yaml",
@@ -72,3 +82,4 @@ t._load_bestFits(
     path="/Users/plh/Documents/git/Emis3D_Refactor/inputs/DIII-D/runs/184407/184407_bestFits_2122.00.h5"
 )
 t._plot_bestFit(evalTime=float(2122.0), save=True)
+"""

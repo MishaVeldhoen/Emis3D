@@ -182,7 +182,6 @@ def residual(
 ):
     """
     Returns the residual for the fit
-
     """
 
     a = 0.0

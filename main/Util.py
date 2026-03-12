@@ -9,7 +9,7 @@ import os
 import h5py
 import numpy as np
 import yaml
-from raysect.core import Point2D
+from raysect.core import Point2D, translate, AffineMatrix3D
 from typing import Any
 
 # from scipy.stats import chi2, removing to speed up things
@@ -473,11 +473,11 @@ def get_rectangle_corners(rect):
     """
 
     try:
-        w = rect.y_width / 2
-        h = rect.x_width / 2
+        h = rect.y_width / 2
+        w = rect.x_width / 2
     except Exception:
-        w = rect.dy / 2
-        h = rect.dx / 2
+        h = rect.dy / 2
+        w = rect.dx / 2
 
     local_corners = [
         (-w, -h, 0),

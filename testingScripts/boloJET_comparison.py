@@ -97,9 +97,7 @@ if True:
     if t_git.info is not None:
         boloGroups = t_git.info["Bolometer Groups"]
         t_git._plot_bolometers(
-            f_,
-            boloGroupName=boloGroups[0],
-            plot_chord_info=False,
+            f_, boloGroupName=boloGroups[0], plot_chord_info=False, legend=True
         )
 
     # --- Plot each individual bolometer
@@ -107,9 +105,7 @@ if True:
         boloGroups = t.info["Bolometer Groups"]
         t._plot_first_wall(f_)
         t._plot_bolometers(
-            f_,
-            boloGroupName=boloGroups[0],
-            plot_chord_info=False,
+            f_, boloGroupName=boloGroups[0], plot_chord_info=False, legend=True
         )
 
     chan = np.arange(1, 25)

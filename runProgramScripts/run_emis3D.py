@@ -2,6 +2,9 @@
 """
 Code that runs emis3D in parallel
 
+Example call:
+python run_emis3D.py
+
 Written by JLH Sept. 2025
 """
 
@@ -11,18 +14,40 @@ import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from concurrent.futures import ProcessPoolExecutor
+# from concurrent.futures import ProcessPoolExecutor # ProcessPoolExecutor raises a lot of errors on a mac
+from concurrent.futures import ThreadPoolExecutor
 
 import time
-import numpy as np
 import main.Emis3D as Emis3D
 import main.Util_emis3D as Util_emis3D
+
+
+_global_data_dict = None
+
+
+def init_worker(data):
+    """
+    Initilizer for each worker process, sets the global data dict
+    """
+    global _global_data_dict
+    _global_data_dict = data
+
+
+def runParallel_with_global(job):
+    """
+    Wrapper that uses the global data_dict
+    """
+    fit_index, pars, synth_dict, scale_def = job
+
+    return Util_emis3D.runParallel(
+        (fit_index, pars, _global_data_dict, synth_dict, scale_def)
+    )
 
 
 if __name__ == "__main__":
 
     # --- Update these parameters:
-    evalTimes = [2124.0]  # np.arange(2119, 2127, 0.3)
+    evalTimes = [2119.0, 2120.0]  # np.arange(2119, 2127, 0.3)
     tokamakName = "DIII-D"
     runConfigName = "184407/184407_runConfig.yaml"
     verbose = True
@@ -38,7 +63,7 @@ if __name__ == "__main__":
         jobs = []
         data_dict = t.fitData[evalTime]
         scale_def = "von_mises"
-        max_workers = 1
+        max_workers = 1  # Default value if non are given
         if t.info is not None:
             if "scale_def" in t.info:
                 scale_def = t.info["scale_def"]
@@ -51,7 +76,6 @@ if __name__ == "__main__":
                     (
                         ii,
                         t.fits[evalTime][ii]["parameters"],
-                        data_dict,
                         t.fits[evalTime][ii]["synthetic_dict"],
                         scale_def,
                     )
@@ -60,8 +84,10 @@ if __name__ == "__main__":
         start_time = time.time()
         print("Preforming fits")
 
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            for ii, fit_result in executor.map(Util_emis3D.runParallel, jobs):
+        with ThreadPoolExecutor(
+            max_workers=max_workers, initializer=init_worker, initargs=(data_dict,)
+        ) as executor:
+            for ii, fit_result in executor.map(runParallel_with_global, jobs):
                 results[ii] = fit_result
                 if ii % 1_000 == 0 and t.verbose:
                     if t.info is not None and "numFits" in t.info:

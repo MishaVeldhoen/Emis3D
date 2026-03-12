@@ -44,7 +44,11 @@ if t.info is not None:
         f_ = f.add_subplot(num_rows, int(num_figs / num_rows), ii + 1)
         t._plot_first_wall(f_)
         t._plot_bolometers(
-            f_, boloGroupName=boloGroup, plot_chord_info=True, plot_etendue=["SX45F07"]
+            f_,
+            boloGroupName=boloGroup,
+            plot_chord_info=True,
+            plot_etendue=["SX45F07"],
+            legend=True,
         )
 
     plt.tight_layout()

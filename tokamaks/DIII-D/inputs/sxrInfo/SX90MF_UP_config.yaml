@@ -9,10 +9,10 @@ CHANNEL_TAGS: ['SX90MF01', 'SX90MF02','SX90MF03', 'SX90MF04', 'SX90MF05', 'SX90M
                'SX90MF13', 'SX90MF14', 'SX90MF15', 'SX90MF16']
 
 BUILD_TYPE: "FROM PRIMITIVES" # Build the camera from primitives, not using a CAD file
-SLIT_WIDTH: 0.003  # 3 mm slit (circular)
-SLIT_HEIGHT: 0.003 # 3 mm slit (circular)
-FOIL_WIDTH: 0.005  # width of the diode
-FOIL_HEIGHT: 0.002  # height of the diode
+SLIT_WIDTH: 0.0004  # 400 um pinhole (circular)
+SLIT_HEIGHT: 0.0004 # 400 um pinhole (circular)
+FOIL_WIDTH: 0.002  # width of the diode
+FOIL_HEIGHT: 0.005  # height of the diode
 FOIL_CORNER_CURVATURE: 0.0005
 SLIT_SENSOR_SEPARATION: 0.02805  # 2.98 cm between the slit and the diode array
 FOIL_SEPARATION: 0.00212  # 2.12 mm between diodes

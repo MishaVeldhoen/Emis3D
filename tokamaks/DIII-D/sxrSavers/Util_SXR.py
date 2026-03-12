@@ -5,13 +5,16 @@ Definitions to grab, store, and filter SXR data on DIII-D
 """
 
 from os.path import dirname, join, realpath
-
 import h5py
 import numpy as np
 import scipy.constants
 
+
 FILE_PATH = dirname(realpath(__file__))
 PARENT_DIRECTORY = dirname(FILE_PATH)
+
+
+EMIS3D_SXR_CALIB_DIRECTORY = pathFileName = join(FILE_PATH, "sxrCalibs")
 
 
 def _get_calib_info(ShotNumber, ArrayName=None):
@@ -32,8 +35,10 @@ def _get_calib_info(ShotNumber, ArrayName=None):
         # Filter widths for specific shot ranges
 
         # Figure out what file to grab
+        path_calib = None
+        pinhole_diameter, pinhole_thickness = [], []
         if ArrayName.upper() in ["SX90RP1F", "SX90RM1F"]:
-            path_calib = join(PARENT_DIRECTORY, "SXRsettingsPA.dat")
+            path_calib = join(EMIS3D_SXR_CALIB_DIRECTORY, "SXRsettingsPA.dat")
             PA = ArrayName.upper() in ["SX90RP1F", "SX90RM1F"]
             P = ArrayName.upper() in ["SX90RP1F"]
             open_file = True
@@ -51,13 +56,20 @@ def _get_calib_info(ShotNumber, ArrayName=None):
             P = False
             open_file = True
             pinhole_diameter = [0.0, 3.6e3, 3.6e3, 3.6e3, 3.6e3, 3.6e3]
-            pinhole_thickness = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-            info["ELEMENT_AREA"] = 4.1 * 0.75 / 1.0e6
+            pinhole_thickness = [
+                0.0,
+                50.0,
+                50.0,
+                50.0,
+                50.0,
+                50.0,
+            ]  # [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            info["ELEMENT_AREA"] = 2.0 * 5.0 / 1.0e6  # 4.1 * 0.75 / 1.0e6
             info["ELEMENT_WIDTH"] = 2.0 / 1.0e3
             info["ELEMENT_HEIGHT"] = 5.0 / 1.0e3
-            info["CENTER_TO_PINHOLE"] = 2.7
-            info["CENTER_CENTER_SPACING"] = 0.095
-            info["nchan"] = 20
+            info["CENTER_TO_PINHOLE"] = 2.8
+            info["CENTER_CENTER_SPACING"] = 0.212  # 0.095
+            info["nchan"] = 16  # 20
         elif ArrayName.upper() == "DISRADU":
             info["Rc"] = 2.0e3
             info["GAIN"] = 1.0
@@ -73,9 +85,9 @@ def _get_calib_info(ShotNumber, ArrayName=None):
             open_file = False
 
         else:
-            raise Exception("Not a valid array!")
+            raise Exception("Not a valid array!", ArrayName)
 
-        if open_file:
+        if open_file and path_calib is not None:
             # Read the file
             file_data = open(path_calib, "r")
 
@@ -91,9 +103,9 @@ def _get_calib_info(ShotNumber, ArrayName=None):
                     line = line.split()
                     shots.append(int(line[0]))
 
-                    Rc.append(float(line[1 + P].replace("k", "e3")))
-                    Gain.append(float(line[2 + PA + P]))
-                    Filt.append(int(line[3 + PA * 2 + P]))
+                    Rc.append(float(line[1 + P].replace("k", "e3")))  # type:ignore
+                    Gain.append(float(line[2 + PA + P]))  # type:ignore
+                    Filt.append(int(line[3 + PA * 2 + P]))  # type:ignore
 
                 # Start reading the file once you hit the shots
                 if line[:4] == "shot":
@@ -188,7 +200,7 @@ def get_calibration(ShotNumber, ArrayName=None, effective_response=0.12, etendue
                     ]
                 )
 
-            if info["ARRAY"] == "SX90RP1F":
+            if info["ARRAY"] in ["SX90RP1F"]:
                 info["ETENDUE"] = np.array(
                     [
                         1.845,
@@ -334,10 +346,14 @@ def get_calibration(ShotNumber, ArrayName=None, effective_response=0.12, etendue
 
             if info["ARRAY"] in ["SX90RM1F", "SX90RP1F", "DISRADU"]:
                 info["ETENDUE"] = np.concatenate([ETENDUE, np.flip(ETENDUE)])
-            else:
+            # for SXR45
+            elif info["ARRAY"] == "SXR45":
                 # from Eric Hollmann, in load_SXR.py in pytomo
-                active = [18, 17, 15, 13, 11, 10, 9, 8, 7, 6, 5, 3]
-                info["ETENDUE"] = ETENDUE[active]
+                # active = [18, 17, 15, 13, 11, 10, 9, 8, 7, 6, 5, 3]
+                active = [2, 4, 6, 8, 10, 12, 14, 22, 23, 26, 28, 30]
+                E = np.concatenate([ETENDUE, np.flip(ETENDUE)])
+                info["ETENDUE"] = E[active]
+                info["nchan"] = 12
 
     else:
         info["ETENDUE"] = np.array(etendue) * 4.0 * np.pi
@@ -398,7 +414,7 @@ def read_h5(path):
     with h5py.File(path, "r") as f:
         for dset in traverse_datasets(f):
             cols = dset.strip().split("/")[1:]
-            ensure_path(data=data, path=cols, default=f[dset][()])
+            ensure_path(data=data, path=cols, default=f[dset][()])  # type: ignore
     return data
 
 
@@ -476,7 +492,7 @@ def filter_data(data, filter_type="hanning", window_len=21):
 
 
     """
-    
+
     try:
         # print("filtering data using " + filter_type)
 
@@ -491,7 +507,7 @@ def filter_data(data, filter_type="hanning", window_len=21):
 
         temp_data2 = np.convolve(w / w.sum(), temp_data, mode="valid")
 
-        data_filtered =  temp_data2[
+        data_filtered = temp_data2[
             int((window_len - 1) / 2) : int(
                 temp_data2.shape[0] - ((window_len - 1) / 2)
             )
@@ -514,17 +530,10 @@ def filter_data(data, filter_type="hanning", window_len=21):
         temp_err2 = np.sqrt(np.convolve(w / w.sum(), temp_err**2, mode="valid"))
 
         data_filtered_error = temp_err2[
-                int((window_len - 1) / 2) : int(
-                    temp_err2.shape[0] - ((window_len - 1) / 2)
-                )
-            ]
+            int((window_len - 1) / 2) : int(temp_err2.shape[0] - ((window_len - 1) / 2))
+        ]
         return data_filtered, data_filtered_error
-    
+
     except:
         print("The signal couldn't be filtered! Skipping def filter_data.")
         return [], []
-
-
-
-
-        

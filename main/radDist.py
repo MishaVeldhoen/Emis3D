@@ -13,10 +13,7 @@ import os
 import numpy as np
 from cherab.tools.emitters import RadiationFunction
 from matplotlib import cm
-from raysect.core.math import translate
-from raysect.optical import VolumeTransform, NullMaterial  # type: ignore
-
-from raysect.primitive import Cylinder, Subtract
+from raysect.optical import VolumeTransform  # type: ignore
 
 import main.Util_radDist as Util_radDist
 from main.Globals import *
@@ -64,15 +61,12 @@ class RadDist(ABC):
         """
         Wrapper function for self.calc_emissivity to take inputs from Cherab
         """
-        theta = self.info["rotationAngle"]
 
         R, phi = XY_To_RPhi(X, Y)
         # --- Convert phi to be positive
         if phi is not None and phi < 0:
             phi += 2.0 * np.pi
-        emission = self.calc_emissivity(
-            [R], [Z], [phi], theta, emissionName=self.emissionName
-        )
+        emission = self.calc_emissivity([R], [Z], [phi], emissionName=self.emissionName)
         return emission[self.emissionName].item()
 
     def _update_bolometer_properties(self) -> None:
@@ -142,22 +136,21 @@ class RadDist(ABC):
         self.data["scaleFactor"] = scaleFactor
 
     @abstractmethod
-    def _evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
+    def _evaluate(self, R, z, phi, emissionName=None) -> dict:
         """
-        Abstract method to be implemented by subclasses to return the emissivity at the given R, z, phi and theta.
+        Abstract method to be implemented by subclasses to return the emissivity at the given R, z, and phi.
         """
         pass
 
-    def calc_emissivity(self, R, z, phi, theta, emissionName=None) -> dict:
+    def calc_emissivity(self, R, z, phi, emissionName=None) -> dict:
         """
-        Checks that R, z, phi, and theta are withink the tokamak wall limits, then calls _evaluate to get the emissivity.
+        Checks that R, z, phi are withink the tokamak wall limits, then calls _evaluate to get the emissivity.
         """
 
         # Making sure the inputs arrays are of the correct type
         R = np.atleast_1d(R).astype(float)
         z = np.atleast_1d(z).astype(float)
         phi = np.atleast_1d(phi).astype(float)
-        theta = np.atleast_1d(theta).astype(float)
 
         # --- Filling up the other arrays if they are only of length 1
         if len(R) == 1:
@@ -170,13 +163,11 @@ class RadDist(ABC):
             )
         if len(phi) == 1:
             phi = np.full(len(R), phi[0])
-        if len(theta) == 1:
-            theta = np.full(len(R), theta[0])
 
         # --- First call _evaluate to get the emissivity, then check if it is inside the tokamak, if not return 0
-        # emiss format: {emissionName: np.array[self._evalutate(R0,z0,phi0,theta0), self._evalutate(R1,z1,phi1,theta1), ...]}
-        # aka, it is an array of emission at each R, z, phi, and theta location
-        emiss = self._evaluate(R, z, phi, theta, emissionName=emissionName)
+        # emiss format: {emissionName: np.array[self._evalutate(R0,z0,phi0) self._evalutate(R1,z1,phi1, ...]}
+        # aka, it is an array of emission at each R, z, and phi location
+        emiss = self._evaluate(R, z, phi, emissionName=emissionName)
 
         points = np.column_stack((R, z))
         inside = self.tokamak._inside_tokamak(points)
@@ -265,7 +256,6 @@ class RadDist(ABC):
             # --- Evalulate all of the points at once
             R_ = np.array(R_)
             z_ = np.array(z_)
-            theta = self.info["rotationAngle"]
 
             for numbin in range(0, numBins):
                 # print(f"Calculating powerPerBin {numbin + 1} of {numBins}")
@@ -277,7 +267,7 @@ class RadDist(ABC):
                 for emissionName in self.info["emissionNames"]:
 
                     emission = self.calc_emissivity(
-                        R_, z_, phi, theta, emissionName=emissionName
+                        R_, z_, phi, emissionName=emissionName
                     )
 
                     if emissionName not in self.data["emisSqArray"]:
@@ -330,7 +320,10 @@ class RadDist(ABC):
 
     def bolos_observe(self) -> None:
         """
-        Observes the radiation function for each bolometer
+        Observes the radiation function for each bolometer.
+
+        Example found here:
+        https://www.cherab.info/demonstrations/bolometry/observing_radiation_function.html#bolometer-observing-radiation
         """
         # Should be Power or Radiance
         units = self.info["units"]
@@ -359,6 +352,10 @@ class RadDist(ABC):
         # --- Assign sightline resolution, number of processors to be used
         self._update_bolometer_properties()
 
+        # --- Calculate etendue's if asking for radiance
+        if units == "Radiance":
+            self.tokamak.calc_etendues()
+
         # --- Populate world with emitter, this cannot be a seperate definition!
         # unless you include the emitter.material changes in that def as well!
         if self.tokamak.wall is None:
@@ -367,7 +364,7 @@ class RadDist(ABC):
             )
 
         emitter = None
-        # --- Add the emitter to the tokamak wall
+        # --- Add the emitter to the Emission Surface
         for val in self.tokamak.world.children:
             if val.name == "Emission Surface":
                 emitter = val
@@ -394,11 +391,6 @@ class RadDist(ABC):
                 observeVal_error = []
                 ch_order = []
 
-                # --- Calculate etendue's if asking for radiance
-                if units == "Radiance":
-                    if not hasattr(bolo_, "etendues"):
-                        bolo_.calc_etendues()
-
                 # --- Set the units in the foil prior to observing the world
                 for jj, foil in enumerate(bolo_.bolometer_camera):
                     ans = 0
@@ -407,24 +399,59 @@ class RadDist(ABC):
                         foil.units = units
                         foil.observe()
                         if units == "Radiance":
-                            fractional_solid_angle = (
-                                bolo_.etendues[jj] / foil.sensitivity
-                            )
-                            ans = foil.pipelines[0].value.mean / fractional_solid_angle
-                            ans_error = (
-                                np.hypot(
-                                    foil.pipelines[0].value.error()
-                                    / foil.pipelines[0].value.mean,
-                                    bolo_.etendues_error[jj] / bolo_.etendues[jj],
+                            # sightline = foil.as_sightline()
+                            # sightline.observe()
+                            # ans = sightline.pipelines[0].value.mean
+
+                            # --- Below is a calculation of the incident radiance directly,
+                            # renormalising for comparison with the sightline
+                            try:
+                                # --- Check for divide by zero values
+                                if (
+                                    foil.sensitivity == 0
+                                    or foil.pipelines[0].value.mean == 0
+                                    or bolo_.etendues[jj] == 0
+                                ):
+                                    ans = 0
+                                    ans_error = 0
+                                else:
+                                    fractional_solid_angle = (
+                                        bolo_.etendues[jj] / foil.sensitivity
+                                    )
+                                    ans = (
+                                        foil.pipelines[0].value.mean
+                                        / fractional_solid_angle
+                                    )
+                                    ans_error = (
+                                        np.hypot(
+                                            foil.pipelines[0].value.error()
+                                            / foil.pipelines[0].value.mean,
+                                            bolo_.etendues_error[jj]
+                                            / bolo_.etendues[jj],
+                                        )
+                                        * ans
+                                    )
+                            except Exception as e:
+                                print(
+                                    f"An error occured while observing the radiance, {e}"
                                 )
-                                * ans
-                            )
+
+                                print(f"Etendue {bolo_.etendues[jj]}")
+                                print(f"Sensitivity {foil.sensitivity}")
+                                print(
+                                    f"foil.pipelines[0].value.mean {foil.pipelines[0].value.mean}"
+                                )
+                                print(
+                                    f"foil.pipelines[0].value.error() {foil.pipelines[0].value.error()}"
+                                )
+
                         elif units == "Power":
+
                             ans = foil.pipelines[0].value.mean
                             ans_error = foil.pipelines[0].value.error()
 
                     except Exception as e:
-                        print(f"An error occured: {e}")
+                        print(f"An error occured in bolos_observe: {e}")
                         # print(
                         #    f"Single layer cameras currently not supported, add functionality within bolos_observe!"
                         # )
@@ -442,7 +469,7 @@ class RadDist(ABC):
         """
         Returns a contour plot of the radDist at a given phi location
         """
-        theta = self.info["rotationAngle"]
+
         if self.tokamak.wall is None:
             raise RuntimeError(
                 "Tokamak wall is not initialized. Ensure that the wall attribute is set before calling plotCrossSection()."
@@ -461,7 +488,6 @@ class RadDist(ABC):
                     [rarray[ii]],
                     zarray,
                     phi=[phi],
-                    theta=theta,
                     emissionName=emissionName,
                 )
                 emiss[ii, :] += temp[emissionName].squeeze()
@@ -530,6 +556,7 @@ class RadDist(ABC):
                     boloGroupName=boloGroup,
                     plot_chord_info=True,
                     plot_etendue=plot_etendue,
+                    legend=False,
                 )
 
                 # --- Plot a cross-section of the radDist
@@ -652,7 +679,7 @@ class Helical(RadDist):
 
         # --- Create the field line to trace
         if setFieldLine:
-            str_ = f"Building Helical radDist using a polSigma of {self.info['polSigma']:.2f},"
+            str_ = f"Building Helical radDist using a polSigma of {self.info['polSigma']:.2f} elongation of {self.info['elongation']:.2f},"
             str_ += f" starting at R = {startR:.2f}m and z = {startZ:.2f}m"
             print(str_)
             self._build_tokamak(
@@ -684,7 +711,7 @@ class Helical(RadDist):
         ]
         self.info["numTransists"] = numTransists
 
-    def _evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
+    def _evaluate(self, R, z, phi, emissionName=None) -> dict:
         """
         Return the emissivity (W/m^3/rad) at the point (R,z,ph) according to this
         instantiation of Emis3D.
@@ -696,8 +723,6 @@ class Helical(RadDist):
                  z locations to evaluate, meters
             phi :: float, list
                    phi locations of the field lines, in radians
-            theta :: float, list
-                        not used as of right now
             emissionName :: str, optional
                             The name of the emission to evalulate. If None, uses self.emissionName
 
@@ -769,7 +794,8 @@ class Helical(RadDist):
 
     def _scaling_factor(self, bolo_info, emissionName=None) -> list:
         """
-        Returns the scaling factor for the bolometer.
+        Returns the scaling factor for the bolometer. This is used when determining
+        the toroidal peaking factor
         """
         numChan = bolo_info["NUM_CHANNELS"]
         phi = np.deg2rad(float(bolo_info["CAMERA_POSITION_R_Z_PHI"][2]))
@@ -826,7 +852,7 @@ class ElongatedRing(RadDist):
 
             print(str_)
 
-    def _evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
+    def _evaluate(self, R, z, phi, emissionName=None) -> dict:
         """
         Find the emissivity given and input R, z, and phi location
 
@@ -837,8 +863,6 @@ class ElongatedRing(RadDist):
                  z locations to evaluate, meters
             phi :: float, list
                    not used as of right now
-            theta :: float, list
-                    not used as of right now
             emissionName :: str, optional
                             The name of the emission to evalulate. If None, uses self.emissionName
 
@@ -857,7 +881,6 @@ class ElongatedRing(RadDist):
             z0=self.info["startZ"],
             elongation=self.info["elongation"],
             polSigma=self.info["polSigma"],
-            theta=self.info["rotationAngle"],
         )
         return localEmis
 
@@ -911,7 +934,7 @@ class SquareTube(RadDist):
         str_ = f"Building Square Tube radDist using starting at R = {startR:.2f} +/- {dR:.2f}m and z = {startZ:.2f} +/- {dz:.2f}m"
         print(str_)
 
-    def _evaluate(self, R, z, phi, theta, emissionName=None) -> dict:
+    def _evaluate(self, R, z, phi, emissionName=None) -> dict:
         """
         Find the emissivity given and input R, z, and phi location
 
@@ -922,8 +945,6 @@ class SquareTube(RadDist):
                  z locations to evaluate, meters
             phi :: float, list
                    not used as of right now
-            theta :: float, list
-                    not used as of right now
             emissionName :: str, optional
                             The name of the emission to evalulate. If None, uses self.emissionName
 
