@@ -18,7 +18,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from concurrent.futures import ThreadPoolExecutor
 
 import time
-import copy
 import main.Emis3D as Emis3D
 import main.Util_emis3D as Util_emis3D
 
@@ -48,7 +47,7 @@ def runParallel_with_global(job):
 if __name__ == "__main__":
 
     # --- Update these parameters:
-    evalTimes = [2124.0]  # np.arange(2119, 2127, 0.3)
+    evalTimes = [2119.0, 2120.0]  # np.arange(2119, 2127, 0.3)
     tokamakName = "DIII-D"
     runConfigName = "184407/184407_runConfig.yaml"
     verbose = True

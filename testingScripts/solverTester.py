@@ -1,12 +1,12 @@
-#solverTester.py
+# solverTester.py
 """
 This program was written to test out the emis3D solver routine. The main point
-is to load a known radDist, determine the correct scaling coefficients, use the 
+is to load a known radDist, determine the correct scaling coefficients, use the
 Util.emis3d.synthetic_after_fit function to scale the synthetic data, and then compare
 the scaled synthetic data to the original data.
 
 The program will then also step through the emis3D solver, using the residual function to
-see how close the fits are. 
+see how close the fits are.
 
 Written by Jeffrey Herfindal, August 22, 2025.
 """
@@ -24,18 +24,14 @@ from main.Tokamak import Tokamak
 from main.Util import config_loader
 from raysect.core import Point2D
 import main.Emis3D as Emis3D
-from main.Util_emis3D import synthetic_after_fit, residual, scale_exp
+from main.Util_emis3D import residual, scale_exp
 
-evalTime = 2123
-params_dict = {
-"a_injection_location_0_clockwise":1.0,
-"a_injection_location_0_counterClock":2.0,
-"b_injection_location_0_clockwise":1.0,
-"b_injection_location_0_counterClock": 0.0,
-}
+evalTime = 2120.6
+
 
 def point3d_to_rz(point):
     return Point2D(np.hypot(point.x, point.y), point.z)
+
 
 def pellet_initial_parameters(csp=False):
     """
@@ -83,17 +79,19 @@ def pellet_initial_parameters(csp=False):
 
     return data
 
+
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 # Step 1: Create a radDist
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
+
 tokamakName = "DIII-D"
-configFileName = "184407_injectionLocation_225/helical_config.yaml"
-elongation = 1.0
+configFileName = "helical_config.yaml"  # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"  #
+elongation = 0.4
 polSigma = 0.1
-rzvalues = [2.113, 0.5]  # [R,Z] values for the center of the radDist
-rzvalues = [2.107, 0.496]  # [R,Z] values for the center of the radDist
+rotationAngle = 0.0
+rzvalues = [2.055, 0.414]
 # --- Group the bolometers
 bolometerNames = [
     ["SX90PF_UP", "SX90PF_DOWN"],
@@ -101,6 +99,8 @@ bolometerNames = [
     ["DISRADU_UP", "DISRADU_DOWN"],
     # ["SX45F_UP", "SX45F_DOWN"],
 ]
+
+# --- Create the radDist using only one point, we don't need to loop over everything
 pathFileName = os.path.join(
     EMIS3D_INPUTS_DIRECTORY, tokamakName, "radDists", configFileName
 )
@@ -112,8 +112,8 @@ tok = Tokamak(
     tokamakName=tokamakName,
     mode="Build",
     reflections=False,
-    eqFileName="g184407.02100",
     loadBolometers=False,
+    verbose=True,
 )
 
 rzArray = Util_radDist.callRZGridTokamak(
@@ -121,25 +121,39 @@ rzArray = Util_radDist.callRZGridTokamak(
     numRgrid=config["GRID"]["NumRStartGrid"],
     numZgrid=config["GRID"]["NumZStartGrid"],
 )
-rzArray[0] = [rzvalues[0], rzvalues[1]]
 
+# --- Update the configuration file
+rzArray[0] = [rzvalues[0], rzvalues[1]]
 config["polSigma"] = polSigma
 config["elongation"] = elongation
+config["rotationAngle"] = rotationAngle
 config["saveRunsDirectoryName"] = "solverTesting"
 arg_list = [(val, config) for val in rzArray]
-
 arg_list = arg_list[0]
 
+# --- Decrease the number of sampling points used, to speed up the process
+arg_list[1]["BOLOMETER_PROPS"] = {"pixelSamples": 100, "numProcessors": 1}
 
 # --- Delete old radDist directory if it exists
-radDist_dir = os.path.join(EMIS3D_INPUTS_DIRECTORY, tokamakName
-                          , "radDists", "solverTesting")
+radDist_dir = os.path.join(
+    EMIS3D_INPUTS_DIRECTORY, tokamakName, "radDists", "solverTesting"
+)
 if os.path.exists(radDist_dir):
     import shutil
-    shutil.rmtree(radDist_dir)
-# --- This will not work after I am done testing since the definition will not return the radDist
-hel = Util_radDist.radDist_Helical_parallel(arg_list)
 
+    shutil.rmtree(radDist_dir)
+
+# --- Create the radDist
+if config["distType"] == "Helical":
+    rD = Util_radDist.radDist_Helical_parallel_return_radDist(arg_list)
+elif config["distType"] == "ElongatedRing":
+    rD = Util_radDist.radDist_ElongatedRing_parallel_return_radDist(arg_list)
+elif config["distType"] == "SquareTube":
+    rD = Util_radDist.radDist_SquareTube_parallel_return_radDist(arg_list)
+else:
+    raise RuntimeError(
+        "Please have 'elongatedRing', 'helical', or 'SqureTube' in the configFileName"
+    )
 
 
 # ------------------------------------------------------------------------------
@@ -147,32 +161,39 @@ hel = Util_radDist.radDist_Helical_parallel(arg_list)
 # Step 2: Load the data in emis3D, create synthetic signal based off known parameters
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
-
-t = Emis3D.Emis3D(tokamakName="DIII-D", runConfigName="184407/184407_runConfig.yaml")
+t = Emis3D.Emis3D(
+    tokamakName="DIII-D", runConfigName="solverTesting_runConfig.yaml", initialize=True
+)
 if t.info is not None:
-    t.info['radDistDirectories'] = ['solverTesting']
-t._load_radDists()
-t._load_bolometer_data()
+    t.info["radDistDirectories"] = ["solverTesting"]
 
-t._prepare_data_for_fit(evalTime=float(evalTime))
-t._prepare_synthetic_for_fits(evalTime=float(evalTime))
+
+# --- Going through t._perform_fits()
+t._prepare_fits(evalTime=evalTime, crossCalib=False)
+
+
+# --- Going through t._minimize_radDists()
 ii = 0
 
 data_dict = t.fitData[evalTime]
-synthetic_dict = t.fitSynthetic["injection_location_0"][ii]["data"].copy()
-par = t.fitSynthetic["injection_location_0"][ii]["params"]
+synth_dict = t.fits[evalTime][ii]["synthetic_dict"]
+pars = t.fits[evalTime][ii]["parameters"]
 
-# --- Update with known parameters
-for key in params_dict:
-    par[key].set(value=params_dict[key])
 
 if t.info is not None:
     scale_def = t.info["scale_def"]
 else:
     scale_def = "linear"
 
-data_manual = {}
-data_manual = synthetic_after_fit(par, synthetic_dict, scale_def=scale_def)
+# --- You can get the synthetic data from the residual definition
+data_manual = residual(
+    pars,
+    None,
+    synth_dict,
+    scale_def,
+    boloNames=None,
+    residual=False,
+)
 
 # --- Arrange each set in a dictionary for easy plotting
 data_manual_dict = {}
@@ -182,12 +203,18 @@ for emissionName in data_manual:
     synthetic_manual_dict[emissionName] = {}
     for ii in range(len(t.channel_order["channel_list"])):
         map_ = dict(
-            zip(t.channel_order["channel_list"][ii], data_manual[emissionName][ii].copy())
+            zip(
+                t.channel_order["channel_list"][ii],
+                data_manual[emissionName][ii].copy(),
+            )
         )
         data_manual_dict[emissionName].update(map_)
 
         map_2 = dict(
-            zip(t.channel_order["channel_list"][ii], synthetic_dict[emissionName]['data'][ii].copy())
+            zip(
+                t.channel_order["channel_list"][ii],
+                synth_dict[emissionName]["data"][ii].copy(),
+            )
         )
         synthetic_manual_dict[emissionName].update(map_2)
 
@@ -199,9 +226,7 @@ del t
 # Step 3: Check the residual function with the current fit parameters
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
-res_manual = residual(par, data_dict, synthetic_dict, scale_def=scale_def)
-
-
+res_manual = residual(pars, data_dict, synth_dict, scale_def=scale_def)
 
 
 # ------------------------------------------------------------------------------
@@ -212,9 +237,7 @@ res_manual = residual(par, data_dict, synthetic_dict, scale_def=scale_def)
 t2 = Emis3D.Emis3D(tokamakName="DIII-D", runConfigName="184407/184407_runConfig.yaml")
 t2._load_radDists()
 t2._load_bolometer_data()
-t2._prepare_fits(evalTime=float(evalTime))
-
-
+t2._perform_fits(evalTime=float(evalTime))
 
 
 # ------------------------------------------------------------------------------
@@ -224,25 +247,25 @@ t2._prepare_fits(evalTime=float(evalTime))
 # ------------------------------------------------------------------------------
 # --- Find the location of each bolometer
 bolo_tokamak = []
-if hel is not None and hasattr(hel, "tokamak") and hasattr(hel.tokamak, "bolometers"):
-    for bolo in hel.tokamak.bolometers: # type: ignore
+if rD is not None and hasattr(rD, "tokamak") and hasattr(rD.tokamak, "bolometers"):
+    for bolo in rD.tokamak.bolometers:  # type: ignore
         bolo_tokamak.append(bolo.name)
 else:
-    raise AttributeError("hel or hel.tokamak.bolometers is not properly initialized.")
+    raise AttributeError("rD or rD.tokamak.bolometers is not properly initialized.")
 
 
 # --- Plot each individual bolometer
 if True:
-    
+
     num_rows = len(bolometerNames) + 1
     f = plt.figure(figsize=(15, 8))
 
     for ii, boloGroup in enumerate(bolometerNames):
         f_top = f.add_subplot(2, num_rows, ii + 1)
-        tok._plot_first_wall(f_top)
+        rD.tokamak._plot_first_wall(f_top)
         for bolo in boloGroup:
             indx_ = bolo_tokamak.index(bolo)
-            for foil in hel.tokamak.bolometers[indx_].bolometer_camera: # type: ignore
+            for foil in rD.tokamak.bolometers[indx_].bolometer_camera:  # type: ignore
                 slit_centre = foil.slit.centre_point
                 slit_centre_rz = point3d_to_rz(slit_centre)
                 f_top.plot(slit_centre_rz[0], slit_centre_rz[1], "ko")
@@ -265,18 +288,17 @@ if True:
         # --- Plot the radDist
         # Use the first bolometer in the group to get indx_
         indx_plot = bolo_tokamak.index(boloGroup[0])
-        hel.plotCrossSection(
+        rD.plotCrossSection(
             phi=np.deg2rad(
-                int(hel.tokamak.bolometers[indx_plot].info["CAMERA_POSITION_R_Z_PHI"][2])
+                int(rD.tokamak.bolometers[indx_plot].info["CAMERA_POSITION_R_Z_PHI"][2])
             ),
             ax=f_top,
         )
 
-
     # --- Plot SPI injection location
     f_top = f.add_subplot(2, num_rows, len(bolometerNames) + 1)
-    tok._plot_first_wall(f_top)
-    hel.plotCrossSection(phi=np.deg2rad(config["injectionLocation"]), ax=f_top)
+    rD.tokamak._plot_first_wall(f_top)
+    rD.plotCrossSection(phi=np.deg2rad(config["injectionLocation"]), ax=f_top)
     spi_path = pellet_initial_parameters(csp=False)
     f_top.plot(
         [spi_path["R_IN"], spi_path["R_OUT"]],
@@ -296,7 +318,7 @@ if True:
     f_top.set_title("Injection Location")
 
     # --- Plot the LCFS
-    f_top.plot(tok.gfile.rbbbs, tok.gfile.zbbbs, "-k", linewidth=1)
+    f_top.plot(rD.tokamak.gfile.rbbbs, rD.tokamak.gfile.zbbbs, "-k", linewidth=1)
 
     # --- Plot the observed emissivities
 
@@ -304,8 +326,8 @@ if True:
 
     for ii, boloGroup in enumerate(bolometerNames):
         plot_observed = True
-        f_top = f.add_subplot(2, num_rows, ii + 6)
-        for qq, emissionName in enumerate(hel.info["emissionNames"]):
+        f_top = f.add_subplot(2, num_rows, ii + 5)
+        for qq, emissionName in enumerate(rD.info["emissionNames"]):
 
             # --- Manual synthetic data
             data_observed = []
@@ -317,16 +339,16 @@ if True:
             chan_ = []
             for jj, bolo in enumerate(boloGroup):
                 indx_ = bolo_tokamak.index(bolo)
-                ch_tags = hel.tokamak.bolometers[indx_].info["CHANNEL_TAGS"]
+                ch_tags = rD.tokamak.bolometers[indx_].info["CHANNEL_TAGS"]
                 c_ = []
-                for ch in ch_tags: # type: ignore
+                for ch in ch_tags:  # type: ignore
                     c_.append(int(ch[-2:]))
                     data_synthetic.append(synthetic_manual_dict[emissionName][ch])
                     data_synthetic_manual.append(data_manual_dict[emissionName][ch])
-                    data_observed.append(data_dict['dataMap'][ch])
-                    data_observed_err.append(data_dict['dataMap'][ch] * 0.3)
+                    data_observed.append(data_dict["dataMap"][ch])
+                    data_observed_err.append(data_dict["dataMap"][ch] * 0.3)
 
-                data_ += hel.data[hel.info["units"]][emissionName][bolo]
+                data_ += rD.data[rD.info["units"]][emissionName][bolo]
                 chan_ += c_
 
             # --- Sort the channel list in ascending order
@@ -351,13 +373,13 @@ if True:
                     np.array(data_observed)[inds],
                     yerr=np.abs(np.array(data_observed_err))[inds],
                     fmt="o",
-                    color='black',
+                    color="black",
                     label=f"{emissionName} observed data",
                 )
         plot_observed = False
 
         f_top.legend(fontsize=8)
-        f_top.set_ylabel(f"{hel.data['units']}")
+        f_top.set_ylabel(f"{rD.data['units']}")
         f_top.set_xlabel("channel")
 
     plt.tight_layout()
