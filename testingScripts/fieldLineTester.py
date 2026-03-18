@@ -25,6 +25,6 @@ z0 = [0.601]
 # R0 = [2.1]
 # z0 = [0.1]
 startPhi = 225
-t.set_fieldlines(startR=R0, startZ=z0, startPhi=deg2rad(startPhi), numTransists=2.0)
+t.set_fieldlines(startR=R0, startZ=z0, startPhi=deg2rad(startPhi), numTransists=1.0)
 
 t.plot(fieldLineStartPhi=startPhi)

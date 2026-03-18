@@ -21,8 +21,8 @@ from main.Util import config_loader
 
 tokamakName = "DIII-D"
 configFileName = "helical_config.yaml"  # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"  #
-elongation = 0.4
-polSigma = 0.1
+elongation = 2.0
+polSigma = 0.05
 rotationAngle = 0.0
 rzvalues = [2.0, 0.56]
 
@@ -60,21 +60,23 @@ config["rotationAngle"] = rotationAngle
 arg_list = [(val, config) for val in rzArray]
 arg_list = arg_list[0]
 
+
 # --- Decrease the number of sampling points used, to speed up the process
 arg_list[1]["BOLOMETER_PROPS"] = {"pixelSamples": 100, "numProcessors": 1}
 
 
 # --- Create the radDist
 if config["distType"] == "Helical":
-    rD = Util_radDist.radDist_Helical_parallel_return_radDist(arg_list)
+    rD = Util_radDist.radDist_Helical_parallel(arg_list, return_result=True)
 elif config["distType"] == "ElongatedRing":
-    rD = Util_radDist.radDist_ElongatedRing_parallel_return_radDist(arg_list)
+    rD = Util_radDist.radDist_ElongatedRing_parallel(arg_list, return_result=True)
 elif config["distType"] == "SquareTube":
-    rD = Util_radDist.radDist_SquareTube_parallel_return_radDist(arg_list)
+    rD = Util_radDist.radDist_SquareTube_parallel(arg_list, return_result=True)
 else:
     raise RuntimeError(
         "Please have 'elongatedRing', 'helical', or 'SqureTube' in the configFileName"
     )
 
 # --- Plot everything ---
-rD.plotOverview(plot_etendue=["SX45F07"])
+if rD is not None:
+    rD.plotOverview(plot_etendue=["SX45F07"])

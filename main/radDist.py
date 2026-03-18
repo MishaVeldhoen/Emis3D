@@ -6,6 +6,8 @@ Created on Fri Jun 11 13:12:06 2021
 
 Re-organized pretty much everything, added parallelization, and a lot more during the refactor -JLH Aug., 2025
 
+TODO: Add checker in helical radDist so elongation cannot be less than 1
+
 """
 
 import os
@@ -880,7 +882,7 @@ class ElongatedRing(RadDist):
             z=z,
             z0=self.info["startZ"],
             elongation=self.info["elongation"],
-            polSigma=self.info["polSigma"],
+            pol_sigma=self.info["polSigma"],
         )
         return localEmis
 

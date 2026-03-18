@@ -599,49 +599,55 @@ class Emis3D:
 
                 self.fitData[evalTime]["dataMap"] = data_
 
+                # --- Store the data for each bolometer, to make plotting easier
+                self.fitData[evalTime]["boloData"] = {}
+                self.fitData[evalTime]["boloData_error"] = {}
+
                 # --- Arrange the data in the same order as the synthetic data is ordered
-                for channels in self.channel_order["channel_list"]:
+                # NOTE: observed is what is used in the minimization process. bolo data is organzied
+                # for each bolometer for plotting purposes
+
+                # --- Find the max value in all the channels
+                max_ = 0
+                for ii, channels in enumerate(self.channel_order["channel_list"]):
+                    for channel in channels:
+                        if data_[channel] > max_:
+                            max_ = data_[channel]
+
+                for ii, channels in enumerate(self.channel_order["channel_list"]):
                     temp = []
                     temp_e = []
-                    # --- Find the max value for that array
+
+                    bolo_ = self.channel_order["bolometer_order"][ii]
+
+                    """
+                    # --- Find the max value in all the channels
                     max_ = 0
                     for channel in channels:
                         if data_[channel] > max_:
                             max_ = data_[channel]
+                    """
+
                     for channel in channels:
                         temp.append(data_[channel])
-                        if data_[channel] == 0:
-                            temp_e.append(1.0e4)
-                        else:
-                            err_ = 0.01 * max_ / np.sqrt((data_[channel]) / max_)
-                            temp_e.append(err_)
+
+                        # --- Large error for zero signal
+                        err_ = np.float64(1.0e4)
+                        if data_[channel] > 1.0:
+                            err_ = 1.0 * max_ / np.sqrt((data_[channel]))
+
+                        temp_e.append(err_)
 
                     self.fitData[evalTime]["observed"].append(temp)
                     self.fitData[evalTime]["observed_error"].append(temp_e)
 
-                # --- Also store the data for each bolometer, to make plotting easier
-                self.fitData[evalTime]["boloData"] = {}
-                self.fitData[evalTime]["boloData_error"] = {}
-                max_ = 1.0e-6
-                for bolo_ in self.data["observed"]:
-                    self.fitData[evalTime]["boloData"][bolo_] = []
-                    self.fitData[evalTime]["boloData_error"][bolo_] = []
-                    for ch in self.data["observed"][bolo_]["channelOrder"]:
-                        if data_[ch] > max_:
-                            max_ = data_[ch]
-                    for ch in self.data["observed"][bolo_]["channelOrder"]:
-                        self.fitData[evalTime]["boloData"][bolo_].append(data_[ch])
+                    if bolo_ not in self.fitData[evalTime]["boloData"]:
+                        self.fitData[evalTime]["boloData"][bolo_] = []
+                        self.fitData[evalTime]["boloData_error"][bolo_] = []
 
-                # --- Error cacluation, based on the maximum value observed within all of the data
-                # and follows Poisson statistics
-                for bolo_ in self.data["observed"]:
-                    for ch in self.data["observed"][bolo_]["channelOrder"]:
-                        # --- Avoid dividing by zero
-                        if data_[ch] > 1.0:
-                            err_ = 0.03 * max_ / np.sqrt((data_[ch]) / max_)
-                        else:
-                            err_ = 1.0e4
-                        self.fitData[evalTime]["boloData_error"][bolo_].append(err_)
+                    # --- Temp is a nested list of bolometers [[Bolo1-1, Bolo1-2, ...], [Bolo2-1, Bolo2-2], etc.]
+                    self.fitData[evalTime]["boloData"][bolo_] = temp
+                    self.fitData[evalTime]["boloData_error"][bolo_] = temp_e
 
                 if self.verbose:
                     print(f"Observed data prepared for fitting")
@@ -1337,6 +1343,8 @@ class Emis3D:
         """
         Plots the fit synthetic signal, data, and radDist for the given evalTime
         """
+        print(f"Plotting the best fit")
+
         boloName = "Unknown"
 
         if self.info is None:
@@ -1388,7 +1396,9 @@ class Emis3D:
         if hasattr(self, "bestFits"):
             if self.info is not None and "injectionLocation" in self.info:
                 phi = self.info["injectionLocation"]
-                self.bestFits[evalTime]["radDist"].plotCrossSection(phi=phi, ax=f_top)
+                self.bestFits[evalTime]["radDist"].plotCrossSection(
+                    phi=np.deg2rad(phi), ax=f_top
+                )
         f_top.set_title(f"Injection location = {phi:.2f} degrees")
 
         # --- Plot the observed emissivities
@@ -1512,7 +1522,7 @@ class Emis3D:
         """
 
         if self.verbose:
-            print(f"Deleting bad fits for = {evalTime:.2f} ms\n")
+            print(f"Deleting bad fits for = {evalTime:.2f} ms")
 
         # --- Delete the bad fits to save memory
         if hasattr(self, "fits"):

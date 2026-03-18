@@ -73,10 +73,11 @@ arg_list[1]["BOLOMETER_PROPS"] = {"pixelSamples": 500, "numProcessors": 1}
 
 # --- Create the radDist
 if config["distType"] == "Helical":
-    rD = Util_radDist.radDist_Helical_parallel_return_radDist(arg_list)
+    rD = Util_radDist.radDist_Helical_parallel(arg_list, return_result=True)
 elif config["distType"] == "ElongatedRing":
-    rD = Util_radDist.radDist_ElongatedRing_parallel_return_radDist(arg_list)
+    rD = Util_radDist.radDist_ElongatedRing_parallel(arg_list, return_result=True)
 else:
     raise RuntimeError("Please have 'elongatedRing' or 'helical' in the configFileName")
 
-rD.plotOverview()
+if rD is not None:
+    rD.plotOverview()
