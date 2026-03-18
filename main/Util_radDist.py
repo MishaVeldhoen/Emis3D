@@ -19,12 +19,22 @@ import main.Util as Util
 from typing import Optional
 
 
-def radDist_ElongatedRing_parallel(input) -> None:
+def radDist_ElongatedRing_parallel(
+    args: tuple, return_result: bool = False
+) -> None | radDist.ElongatedRing:
     """
-    Computes Elongated Ring radDists based on input rzArray
+    Worker function for parallel computation of ElongatedRing radial distribution.
+
+    Designed to be called via multiprocessing.Pool.map, which requires a single
+    argument. The args tuple is unpacked internally.
+
+    Parameters
+    ----------
+    args : tuple of (rz_array, config)
+        rz_array : array-like of length 2 — (R, z) start coordinates in metres.
+        config   : configuration object passed to radDist.ElongatedRing.
     """
-    rzArray = input[0]
-    config = input[1]
+    rzArray, config = args
     elongatedRing = radDist.ElongatedRing(
         startR=rzArray[0], startZ=rzArray[1], config=config
     )
@@ -33,75 +43,58 @@ def radDist_ElongatedRing_parallel(input) -> None:
     print(
         f"DONE with elongatedRing radDist, R = {rzArray[0]:.2f}m, z = {rzArray[1]:.2f}m"
     )
+    if return_result:
+        return elongatedRing
 
 
-def radDist_ElongatedRing_parallel_return_radDist(input):
+def radDist_Helical_parallel(
+    args: tuple, return_result: bool = False
+) -> None | radDist.Helical:
     """
-    Computes Elongated Ring radDists based on input rzArray
-    """
-    rzArray = input[0]
-    config = input[1]
-    elongatedRing = radDist.ElongatedRing(
-        startR=rzArray[0], startZ=rzArray[1], config=config
-    )
-    elongatedRing.build()
+    Worker function for parallel computation of Helical radial distribution.
 
-    print(
-        f"DONE with elongatedRing radDist, R = {rzArray[0]:.2f}m, z = {rzArray[1]:.2f}m"
-    )
-    return elongatedRing
+    Designed to be called via multiprocessing.Pool.map, which requires a single
+    argument. The args tuple is unpacked internally.
 
-
-def radDist_Helical_parallel(input) -> None:
-    """
-    Computes helical radDists based on input rzArray
+    Parameters
+    ----------
+    args : tuple of (rz_array, config)
+        rz_array : array-like of length 2 — (R, z) start coordinates in metres.
+        config   : configuration object passed to radDist.Helical.
     """
 
-    rzArray = input[0]
-    config = input[1]
+    rzArray, config = args
     helical = radDist.Helical(startR=rzArray[0], startZ=rzArray[1], config=config)
     helical.build()
 
     print(f"DONE with helical radDist, R = {rzArray[0]:.2f}m, z = {rzArray[1]:.2f}m")
 
+    if return_result:
+        return helical
 
-def radDist_Helical_parallel_return_radDist(input):
+
+def radDist_SquareTube_parallel(
+    args: tuple, return_result: bool = False
+) -> None | radDist.SquareTube:
     """
-    Computes helical radDists based on input rzArray
+    Worker function for parallel computation of Square Tube radial distribution.
+
+    Designed to be called via multiprocessing.Pool.map, which requires a single
+    argument. The args tuple is unpacked internally.
+
+    Parameters
+    ----------
+    args : tuple of (rz_array, config)
+        rz_array : array-like of length 2 — (R, z) start coordinates in metres.
+        config   : configuration object passed to radDist.SquareTube.
     """
-
-    rzArray = input[0]
-    config = input[1]
-    helical = radDist.Helical(startR=rzArray[0], startZ=rzArray[1], config=config)
-    helical.build()
-
-    print(f"DONE with helical radDist, R = {rzArray[0]:.2f}m, z = {rzArray[1]:.2f}m")
-    return helical
-
-
-def radDist_SquareTube_parallel(input) -> None:
-    """
-    Computes Square Tube radDists based on input rzArray
-    """
-    rzArray = input[0]
-    config = input[1]
+    rzArray, config = args
     squareTube = radDist.SquareTube(startR=rzArray[0], startZ=rzArray[1], config=config)
     squareTube.build()
 
     print(f"DONE with squareTube radDist, R = {rzArray[0]:.2f}m, z = {rzArray[1]:.2f}m")
-
-
-def radDist_SquareTube_parallel_return_radDist(input):
-    """
-    Computes Square Tube radDists based on input rzArray
-    """
-    rzArray = input[0]
-    config = input[1]
-    squareTube = radDist.SquareTube(startR=rzArray[0], startZ=rzArray[1], config=config)
-    squareTube.build()
-
-    print(f"DONE with squareTube radDist, R = {rzArray[0]:.2f}m, z = {rzArray[1]:.2f}m")
-    return squareTube
+    if return_result:
+        return squareTube
 
 
 def callRZGridTokamak(tokamak, numRgrid=30, numZgrid=15) -> np.ndarray:

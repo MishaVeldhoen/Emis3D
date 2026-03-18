@@ -145,11 +145,11 @@ if os.path.exists(radDist_dir):
 
 # --- Create the radDist
 if config["distType"] == "Helical":
-    rD = Util_radDist.radDist_Helical_parallel_return_radDist(arg_list)
+    rD = Util_radDist.radDist_Helical_parallel(arg_list, return_result=True)
 elif config["distType"] == "ElongatedRing":
-    rD = Util_radDist.radDist_ElongatedRing_parallel_return_radDist(arg_list)
+    rD = Util_radDist.radDist_ElongatedRing_parallel(arg_list, return_result=True)
 elif config["distType"] == "SquareTube":
-    rD = Util_radDist.radDist_SquareTube_parallel_return_radDist(arg_list)
+    rD = Util_radDist.radDist_SquareTube_parallel(arg_list, return_result=True)
 else:
     raise RuntimeError(
         "Please have 'elongatedRing', 'helical', or 'SqureTube' in the configFileName"
