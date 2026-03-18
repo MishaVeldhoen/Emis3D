@@ -7,6 +7,10 @@ Created on Tue Mar 14 11:43:28 2023
 
 Updated and re-written during the refactor - JLH
 
+TODO:
+1) Currently the field lines are stored based on toroidal start location, this may be problematic for the
+helical radDist when initilizing many field lines at the same location. Solution: Store the field lines
+under {startPhi}_R_{startR:.2f}_z_{startz:.2f}, instead of just {startPhi}. OR... is this really an issue?
 """
 
 import os
@@ -919,8 +923,9 @@ class Tokamak(object):
                 # --- Initilize the arrays
                 for kk in range(int(numTransists)):
                     direction = f"{direction_prefix}_rev{kk}"
-                    self.fieldLines[startPhideg]["directionNames"].append(direction)
+
                     if direction not in self.fieldLines[startPhideg]:
+                        self.fieldLines[startPhideg]["directionNames"].append(direction)
                         self.fieldLines[startPhideg][direction] = {}
                         for val in ["R", "L", "x", "y", "z"]:
                             self.fieldLines[startPhideg][direction][val] = np.zeros(

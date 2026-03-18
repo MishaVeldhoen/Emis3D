@@ -88,8 +88,8 @@ def pellet_initial_parameters(csp=False):
 
 tokamakName = "DIII-D"
 configFileName = "helical_config.yaml"  # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"  #
-elongation = 0.4
-polSigma = 0.1
+elongation = 2.0
+polSigma = 0.05
 rotationAngle = 0.0
 rzvalues = [2.055, 0.414]
 # --- Group the bolometers

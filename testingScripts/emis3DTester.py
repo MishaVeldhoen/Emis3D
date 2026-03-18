@@ -56,7 +56,7 @@ tpf = []
 t = None
 
 
-evalTime = 2122.0
+evalTime = 2120.5
 
 tokamakName = "DIII-D"
 runConfigName = "184407/184407_runConfig.yaml"

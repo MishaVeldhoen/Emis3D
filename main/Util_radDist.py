@@ -3,6 +3,10 @@
 File contains defintions used while creating radDists
 
 Written by JLH Aug. 2025
+
+TODO:
+1. Should we normalize the bivariate distributions to 2 pi? Since we integrate
+over the whole tokamak while calculating the radiated power?
 """
 
 
@@ -12,6 +16,7 @@ import numpy as np
 
 import main.radDist as radDist
 import main.Util as Util
+from typing import Optional
 
 
 def radDist_ElongatedRing_parallel(input) -> None:
@@ -171,60 +176,134 @@ def random_uniform_point_noVolume(Wallcurve, Minr, Maxr, Minz, Maxz):
     return x, y, z, r, phi
 
 
-def bivariate_normal_elongated2(
-    R=0, R0=0, z=0, z0=0, elongation=0, polSigma=0, theta=0
+def bivariate_normal_elongated(
+    R: np.ndarray,
+    z: np.ndarray,
+    R0: float = 0.0,
+    z0: float = 0.0,
+    elongation: float = 1.0,
+    pol_sigma: float = 1.0,
+    theta: float = 0.0,
 ):
     """
-    Bivariate normal distribution in poloidal plane.
+    Rotatable 2-D Gaussian distribution in the poloidal plane.
+
+    Generalises bivariate_normal by allowing an elliptical (elongated)
+    and rotated beam profile. Normalised such that ∫∫ f dR dz = 1.
+
+    See: https://en.wikipedia.org/wiki/Gaussian_function#Two-dimensional_Gaussian_function
+
+    Parameters
+    ----------
+    R, z        : array-like — evaluation coordinates.
+    R0, z0      : float      — centre of the distribution.
+    elongation  : float      — standard deviation along the R axis. Must be > 0.
+    pol_sigma    : float      — standard deviation along the z axis. Must be > 0.
+    theta       : float      — rotation angle in degrees (counter-clockwise from R-axis).
+
+    Returns
+    -------
+    np.ndarray — density at each (R, z) point.
     """
-    emis = (
-        (1.0 / (2.0 * np.pi * elongation * polSigma**2))
-        * np.exp(-0.5 * ((R - R0) ** 2) / polSigma**2)
-        * np.exp(-0.5 * ((z - z0) ** 2) / (polSigma * elongation) ** 2)
+
+    # --- Make sure R and z are numpy arrays
+    R = np.asarray(R)
+    z = np.asarray(z)
+
+    theta_rad = np.deg2rad(theta)
+    cos_t, sin_t = np.cos(theta_rad), np.sin(theta_rad)
+
+    a = cos_t**2 / (2.0 * elongation**2) + sin_t**2 / (2.0 * pol_sigma**2)
+
+    b = np.sin(2.0 * theta_rad) / (4.0 * elongation**2) - np.sin(2.0 * theta_rad) / (
+        4.0 * pol_sigma**2
     )
+    c = sin_t**2 / (2.0 * elongation**2) + cos_t**2 / (2.0 * pol_sigma**2)
 
-    if theta != 0:
-        thetaRad = np.deg2rad(theta)
-        c, s = np.cos(thetaRad), np.sin(thetaRad)
-        rotation_matrix = np.array([[c, -s], [s, c]])
-        temp_ = np.dot(rotation_matrix, emis)
-        emis = temp_
+    dR = R - R0
+    dz = z - z0
 
-    return emis
+    norm = 1.0 / (2.0 * np.pi * elongation * pol_sigma)
+    exponent = -(a * dR**2 + 2.0 * b * dR * dz + c * dz**2)
+
+    return norm * np.exp(exponent)
 
 
-def bivariate_normal_elongated(R=0, R0=0, z=0, z0=0, elongation=0, polSigma=0, theta=0):
+def bivariate_normal(
+    R: np.ndarray,
+    z: np.ndarray,
+    R0: float = 0.0,
+    z0: float = 0.0,
+    pol_sigma: float = 1.0,
+) -> np.ndarray:
     """
-    Guassian distribution that is rotatable, from:
-    https://en.wikipedia.org/wiki/Gaussian_function#Two-dimensional_Gaussian_function
+    Bivariate normal distribution in the poloidal plane.
+
+    Normalised such that ∫∫ f dR dz = 1.
+
+    Parameters
+    ----------
+    R, z      : array-like — evaluation coordinates.
+    R0, z0    : float      — centre of the distribution.
+    pol_sigma : float      — standard deviation (same in R and z). Must be > 0.
+
+    Returns
+    -------
+    emis : np.ndarray — density at each (R, z) point.
     """
-    theta = np.deg2rad(theta)
 
-    a = np.cos(theta) ** 2 / (2.0 * elongation**2)
-    b = np.sin(2 * theta) / (4 * elongation**2) - np.sin(2 * theta) / (4 * polSigma**2)
-    c = np.sin(theta) ** 2 / (2 * elongation**2) + np.cos(theta) ** 2 / (
-        2 * polSigma**2
-    )
+    # --- Ensure that R and z are numpy arrays
+    R = np.asarray(R)
+    z = np.asarray(z)
 
-    emis = (
-        1.0
-        / (2.0 * np.pi * elongation * polSigma)
-        * np.exp(
-            -(a * (R - R0) ** 2 + 2.0 * b * (R - R0) * (z - z0) + c * (z - z0) ** 2)
+    norm = 1 / (2 * np.pi * pol_sigma**2)
+    exponent = -0.5 * ((R - R0) ** 2 + (z - z0) ** 2) / pol_sigma**2
+
+    return norm * np.exp(exponent)
+
+
+def bivariate_normal_isodensity_points(
+    R0: float,
+    z0: float,
+    sigma_target: float,
+    sigma_kernel: float,
+    n: int,
+    seed: int | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Generate n source points and weights such that:
+
+        sum_i = w_i * bivariate_normal(R, z, R0=R0_i, z0=z0_i, pol_sigma=sigma_kernel)
+        ≈ bivariate_normal(R, z, R0=R0, z0=z0, pol_sigma=sigma_target)
+
+
+    Parameters
+    ----------
+    R0, z0        : float — centre of the target distribution.
+    sigma_target  : float — std dev of the target Gaussian (σ_T). Must be > sigma_kernel.
+    sigma_kernel  : float — std dev used in each bivariate_normal call (σ_k).
+    n             : int   — number of source points.
+    seed          : int, optional — RNG seed for reproducibility.
+
+    Returns
+    -------
+    points  : np.ndarray, shape (n, 2) — source (R, z) coordinates.
+    weights : np.ndarray, shape (n,)   — equal weights summing to 1.
+
+    Raises
+    ------
+    ValueError if sigma_kernel >= sigma_target (convolution can't shrink a Gaussian).
+    """
+    if sigma_kernel >= sigma_target:
+        raise ValueError(
+            f"sigma_kernel ({sigma_kernel}) must be strictly less than "
+            f"sigma_target ({sigma_target})."
         )
-    )
 
-    return emis
+    sigma_source = np.sqrt(sigma_target**2 - sigma_kernel**2)
 
+    rng = np.random.default_rng(seed)
+    points = rng.normal(loc=[R0, z0], scale=sigma_source, size=(n, 2))
+    weights = np.ones(n) / n
 
-def bivariate_normal(R=0, R0=0, z=0, z0=0, polSigma=0):
-    """
-    Bivariate normal distribution in poloidal plane.
-    Integrated over dR and dZ this function returns 1.
-    """
-    emis = (
-        1
-        / (2 * np.pi * polSigma**2)
-        * np.exp(-0.5 * ((R - R0) ** 2 + (z - z0) ** 2) / polSigma**2)
-    )
-    return emis
+    return points, weights

@@ -21,8 +21,8 @@ from main.Util import config_loader
 
 tokamakName = "DIII-D"
 configFileName = "helical_config.yaml"  # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"  #
-elongation = 0.4
-polSigma = 0.1
+elongation = 2.0
+polSigma = 0.05
 rotationAngle = 0.0
 rzvalues = [2.0, 0.56]
 
@@ -59,6 +59,7 @@ config["elongation"] = elongation
 config["rotationAngle"] = rotationAngle
 arg_list = [(val, config) for val in rzArray]
 arg_list = arg_list[0]
+
 
 # --- Decrease the number of sampling points used, to speed up the process
 arg_list[1]["BOLOMETER_PROPS"] = {"pixelSamples": 100, "numProcessors": 1}
