@@ -11,12 +11,9 @@ over the whole tokamak while calculating the radiated power?
 
 
 import random
-
 import numpy as np
-
 import main.radDist as radDist
 import main.Util as Util
-from typing import Optional
 
 
 def radDist_ElongatedRing_parallel(

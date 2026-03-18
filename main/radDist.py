@@ -68,7 +68,12 @@ class RadDist(ABC):
         # --- Convert phi to be positive
         if phi is not None and phi < 0:
             phi += 2.0 * np.pi
-        emission = self.calc_emissivity([R], [Z], [phi], emissionName=self.emissionName)
+        emission = self.calc_emissivity(
+            np.array([R]),
+            np.array([Z]),
+            np.array([phi]),
+            emissionName=self.emissionName,
+        )
         return emission[self.emissionName].item()
 
     def _update_bolometer_properties(self) -> None:
@@ -138,21 +143,20 @@ class RadDist(ABC):
         self.data["scaleFactor"] = scaleFactor
 
     @abstractmethod
-    def _evaluate(self, R, z, phi, emissionName=None) -> dict:
+    def _evaluate(
+        self, R: np.ndarray, z: np.ndarray, phi: np.ndarray, emissionName: str = ""
+    ) -> dict:
         """
         Abstract method to be implemented by subclasses to return the emissivity at the given R, z, and phi.
         """
         pass
 
-    def calc_emissivity(self, R, z, phi, emissionName=None) -> dict:
+    def calc_emissivity(
+        self, R: np.ndarray, z: np.ndarray, phi: np.ndarray, emissionName: str = ""
+    ) -> dict:
         """
         Checks that R, z, phi are withink the tokamak wall limits, then calls _evaluate to get the emissivity.
         """
-
-        # Making sure the inputs arrays are of the correct type
-        R = np.atleast_1d(R).astype(float)
-        z = np.atleast_1d(z).astype(float)
-        phi = np.atleast_1d(phi).astype(float)
 
         # --- Filling up the other arrays if they are only of length 1
         if len(R) == 1:
@@ -176,7 +180,7 @@ class RadDist(ABC):
 
         # --- Multiply the emissivity by 1 if inside, 0 if outside
         result = np.zeros_like(inside, dtype=float)
-        result[inside] = 1.0e9
+        result[inside] = 1.0  # WAS 1.0e9 for some reason....
 
         # Return the emissivity values for each point, setting to 0 if outside the tokamak
         for emissionName in emiss:
@@ -197,7 +201,9 @@ class RadDist(ABC):
         self._get_scale_factor()
         self.saveRadDist()
 
-    def power_per_bin_calc(self, Errfrac=0.01, Pointsupdate=int(1e5)) -> None:
+    def power_per_bin_calc(
+        self, Errfrac: float = 0.01, Pointsupdate: int = int(1e5)
+    ) -> None:
         """
         Replaces the power_per_bin_calc with a vectorized version.
         """
@@ -467,7 +473,7 @@ class RadDist(ABC):
                 if bolo_.name not in self.data[units]["channelOrder"]:
                     self.data[units]["channelOrder"][bolo_.name] = ch_order
 
-    def plotCrossSection(self, phi=0, ax=None) -> None:
+    def plotCrossSection(self, phi: float = 0.0, ax=None) -> None:
         """
         Returns a contour plot of the radDist at a given phi location
         """
@@ -487,9 +493,9 @@ class RadDist(ABC):
         for emissionName in self.info["emissionNames"]:
             for ii in range(rarray.shape[0]):
                 temp = self.calc_emissivity(
-                    [rarray[ii]],
+                    np.array([rarray[ii]]),
                     zarray,
-                    phi=[phi],
+                    phi=np.array([phi]),
                     emissionName=emissionName,
                 )
                 emiss[ii, :] += temp[emissionName].squeeze()
@@ -521,7 +527,7 @@ class RadDist(ABC):
                 weight="bold",
             )
 
-    def plotOverview(self, return_figure=False, plot_etendue=[]):
+    def plotOverview(self, return_figure: bool = False, plot_etendue: list = []):
         """
         Plots the bolometer chords with a contour overplot of the radDist in the top row
         Plots the observed emissivities in the bottom row
@@ -644,7 +650,7 @@ class RadDist(ABC):
         save_json(toSave, pathFileName, saveFileName)
 
     @abstractmethod
-    def _scaling_factor(self, bolo_info, emissionName=None) -> list:
+    def _scaling_factor(self, bolo_info: dict = {}, emissionName: str = "") -> list:
         """
         Abstract method to be implemented by subclasses to return the
         scaling factor for the bolometer.
@@ -656,23 +662,22 @@ class Helical(RadDist):
     Helical radDist class used to produce radDist based on the magnetic
     field line at a given R and z.
 
-    INPUTS:
+    Parameters
+    ----------
+    startR, startz  : float     — centre of the field line.
+    config          : dict      — dict of the configuration file.
+    setFieldLine    : bool      — Trace the field line, should be true 99% of the time.
 
-    setFieldLine :: Trace the field line, should be true 99% of the time
+
     """
 
     def __init__(
         self,
-        startR=None,
-        startZ=None,
-        config={},
-        setFieldLine=True,
+        startR: float = 0.0,
+        startZ: float = 0.0,
+        config: dict = {},
+        setFieldLine: bool = True,
     ):
-        # Ensure startR and startZ are floats, not None
-        if startR is None:
-            startR = float(config.get("startR", 2.96))
-        if startZ is None:
-            startZ = float(config.get("startZ", 0.0))
 
         super(Helical, self).__init__(startR=startR, startZ=startZ, config=config)
 
@@ -794,7 +799,176 @@ class Helical(RadDist):
 
         return localEmis
 
-    def _scaling_factor(self, bolo_info, emissionName=None) -> list:
+    def _scaling_factor(self, bolo_info: dict = {}, emissionName: str = "") -> list:
+        """
+        Returns the scaling factor for the bolometer. This is used when determining
+        the toroidal peaking factor
+        """
+        numChan = bolo_info["NUM_CHANNELS"]
+        phi = np.deg2rad(float(bolo_info["CAMERA_POSITION_R_Z_PHI"][2]))
+
+        # --- Find the revolution number, this needs to be more universal...
+        if emissionName is not None:
+            # _rev0, rev1, rev2, ...
+            if "rev" in emissionName:
+                revNumber = int(emissionName.split("rev")[-1])
+            else:
+                revNumber = 0
+        else:
+            revNumber = 0
+
+        return [float(phi) + revNumber * 2.0 * np.pi] * numChan
+
+
+class HelicalRing(RadDist):
+    """
+    HelicalRing radDist class used to produce radDist based on the magnetic
+    field line at a given R and z.
+
+    Parameters
+    ----------
+    startR, startz  : float     — centre of the field line.
+    config          : dict      — dict of the configuration file.
+    setFieldLine    : bool      — Trace the field line, should be true 99% of the time.
+
+
+    """
+
+    def __init__(
+        self,
+        startR: float = 0.0,
+        startZ: float = 0.0,
+        config: dict = {},
+        setFieldLine: bool = True,
+    ):
+
+        super(HelicalRing, self).__init__(startR=startR, startZ=startZ, config=config)
+
+        self.info["setFieldLine"] = setFieldLine
+        self.info["distType"] = "helical"
+
+        # --- Create the field line to trace
+        if setFieldLine:
+            str_ = f"Building HelicalRing radDist using a polSigma of {self.info['polSigma']:.2f} elongation of {self.info['elongation']:.2f},"
+            str_ += f" starting at R = {startR:.2f}m and z = {startZ:.2f}m"
+            print(str_)
+            self._build_tokamak(
+                tokamakName=self.info["tokamakName"],
+                mode="Build",
+                reflections=False,
+                eqFileName=self.info["eqFileName"],
+            )
+            self.setFieldLine()
+
+    def setFieldLine(self) -> None:
+        """
+        Traces the field line based on the startR and startZ
+        """
+        numTransists = 1.0
+
+        self.tokamak.set_fieldlines(
+            startR=[self.info["startR"]],
+            startZ=[self.info["startZ"]],
+            startPhi=self.info["startPhiRad"],
+            numTransists=numTransists,
+        )
+        startPhideg = f'{int(np.rad2deg(self.info["startPhiRad"]))}'
+
+        if startPhideg not in self.tokamak.fieldLines:
+            raise RuntimeError(
+                f"Input fieldLinePhi of {startPhideg}, not availble!"
+                f"Possible fieldLinePhi(s): {self.tokamak.get_fieldLines_startPhis()}"
+            )
+        self.info["emissionNames"] = self.tokamak.fieldLines[startPhideg][
+            "directionNames"
+        ]
+        self.info["numTransists"] = numTransists
+
+    def _evaluate(
+        self, R: np.ndarray, z: np.ndarray, phi: np.ndarray, emissionName: str = ""
+    ) -> dict:
+        """
+        Return the emissivity (W/m^3/rad) at the point (R,z,ph) according to this
+        instantiation of Emis3D.
+
+        Parameters
+        ----------
+            R :: float, list
+                 R locations to evalulate, meters
+            z :: float, list
+                 z locations to evaluate, meters
+            phi :: float, list
+                   phi locations of the field lines, in radians
+            emissionName :: str, optional
+                            The name of the emission to evalulate. If None, uses self.emissionName
+
+        """
+        # --- Set emissionName if called with self._evalulateCherab()
+        if emissionName == "":
+            emissionName = self.emissionName
+
+        localEmis = {}
+        R0, z0 = self.tokamak.find_RZ_Fline(
+            str(self.info["startPhi"]), emissionName, inputPhis=phi
+        )
+        R0 = R0.flatten()
+        z0 = z0.flatten()
+
+        vertExtendParam = 3.0  # for vertical extension of plasma... hardcoded for now
+
+        # next we need the R,Z position of our helical structure at this phi
+        flR, flZ = self.tokamak.find_RZ_Fline(
+            str(self.info["startPhi"]), emissionName, inputPhis=phi
+        )
+
+        # now for bivariate normal distribution in poloidal plane.
+        # elongated in approximate poloidal direction of field line
+
+        # first we need to decompose (R,Z) in terms of parallel/perpendicular
+        # to approximate field line. Approximated as the perpendicular direction
+        # to the vector from (major radius, zoffset) to (flR, flZ)
+        # "cent0" = (major radius, zoffset), "cent1" = (flR, flZ), "point" = (R,Z)
+        if self.tokamak.info is not None:
+            cent0ToCent1Vec = [flR - self.tokamak.info["MACHINE"]["majorRadius"], flZ]
+            cent0ToCent1Vec[1] = cent0ToCent1Vec[1] / vertExtendParam
+            cent0ToCent1VecMag = np.sqrt(
+                cent0ToCent1Vec[0] ** 2 + cent0ToCent1Vec[1] ** 2
+            )
+            cent0ToCent1VecNormed = [x / cent0ToCent1VecMag for x in cent0ToCent1Vec]
+            perpVecNormed = [-cent0ToCent1VecNormed[1], cent0ToCent1VecNormed[0]]
+            cent1ToPointVec = [R - flR, z - flZ]
+            paralleldist = (
+                cent1ToPointVec[0] * cent0ToCent1VecNormed[0]
+                + cent1ToPointVec[1] * cent0ToCent1VecNormed[1]
+            )
+            perpdist = (
+                cent1ToPointVec[0] * perpVecNormed[0]
+                + cent1ToPointVec[1] * perpVecNormed[1]
+            )
+
+            emis = (
+                (
+                    1.0
+                    / (
+                        2.0
+                        * np.pi
+                        * self.info["elongation"]
+                        * (self.info["polSigma"] ** 2)
+                    )
+                )
+                * np.exp(
+                    -0.5
+                    * (perpdist**2)
+                    / (self.info["polSigma"] * self.info["elongation"]) ** 2
+                )
+                * np.exp(-0.5 * (paralleldist**2) / self.info["polSigma"] ** 2)
+            )
+
+            localEmis[emissionName] = emis.flatten()
+
+        return localEmis
+
+    def _scaling_factor(self, bolo_info: dict = {}, emissionName: str = "") -> list:
         """
         Returns the scaling factor for the bolometer. This is used when determining
         the toroidal peaking factor
@@ -854,17 +1028,20 @@ class ElongatedRing(RadDist):
 
             print(str_)
 
-    def _evaluate(self, R, z, phi, emissionName=None) -> dict:
+    def _evaluate(
+        self, R: np.ndarray, z: np.ndarray, phi: np.ndarray, emissionName: str = ""
+    ) -> dict:
         """
         Find the emissivity given and input R, z, and phi location
 
-        Inputs:
+        Parameters
+        ----------
             R :: float, list
                  R locations to evalulate, meters
             z :: float, list
                  z locations to evaluate, meters
             phi :: float, list
-                   not used as of right now
+                   phi locations of the field lines, in radians
             emissionName :: str, optional
                             The name of the emission to evalulate. If None, uses self.emissionName
 
@@ -886,7 +1063,7 @@ class ElongatedRing(RadDist):
         )
         return localEmis
 
-    def _scaling_factor(self, bolo_info, emissionName=None) -> list:
+    def _scaling_factor(self, bolo_info: dict = {}, emissionName: str = "") -> list:
         """
         Returns the scaling factor for the bolometer.
         """
@@ -936,17 +1113,20 @@ class SquareTube(RadDist):
         str_ = f"Building Square Tube radDist using starting at R = {startR:.2f} +/- {dR:.2f}m and z = {startZ:.2f} +/- {dz:.2f}m"
         print(str_)
 
-    def _evaluate(self, R, z, phi, emissionName=None) -> dict:
+    def _evaluate(
+        self, R: np.ndarray, z: np.ndarray, phi: np.ndarray, emissionName: str = ""
+    ) -> dict:
         """
         Find the emissivity given and input R, z, and phi location
 
-        Inputs:
+        Parameters
+        ----------
             R :: float, list
                  R locations to evalulate, meters
             z :: float, list
                  z locations to evaluate, meters
             phi :: float, list
-                   not used as of right now
+                   phi locations of the field lines, in radians
             emissionName :: str, optional
                             The name of the emission to evalulate. If None, uses self.emissionName
 
@@ -971,7 +1151,7 @@ class SquareTube(RadDist):
 
         return localEmis
 
-    def _scaling_factor(self, bolo_info, emissionName=None) -> list:
+    def _scaling_factor(self, bolo_info: dict = {}, emissionName: str = "") -> list:
         """
         Returns the scaling factor for the bolometer.
         """
