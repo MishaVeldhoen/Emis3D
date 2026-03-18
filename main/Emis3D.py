@@ -94,6 +94,8 @@ from main.radDist import Helical, ElongatedRing
 from scipy.integrate import simpson
 import time
 import dill
+import flammkuchen as fl
+import pdb
 
 
 class Emis3D:
@@ -986,6 +988,7 @@ class Emis3D:
             radDist_ = Helical(config=rad_.info, setFieldLine=False)
         elif info["distType"] == "elongatedRing":
             radDist_ = ElongatedRing(config=rad_.info)
+            # radDist_ = ElongatedRing(startR=0,startZ=0)
         else:
             print(f"self_rebuild_radDist() only supports Helical or ElongatedRing")
             return
@@ -1387,6 +1390,16 @@ class Emis3D:
                         phi=phi, ax=f_top
                     )
             f_top.set_title(boloName)
+            
+            # Put angle next to boloName
+            if '90' in boloName:
+                bolo_phi = 90
+            elif '45' in boloName:
+                bolo_phi = 45
+            elif 'DISRAD' in boloName:
+                bolo_phi = 225
+            
+            f_top.set_title(boloName+" ("+str(bolo_phi)+"°)")
 
         # --- Plot the contour at the injection location
         count_ += 1
@@ -1395,7 +1408,8 @@ class Emis3D:
         phi = 0
         if hasattr(self, "bestFits"):
             if self.info is not None and "injectionLocation" in self.info:
-                phi = self.info["injectionLocation"]
+                # Put angle back in real coordinates for plot
+                phi = 360 - self.info["injectionLocation"]
                 self.bestFits[evalTime]["radDist"].plotCrossSection(
                     phi=np.deg2rad(phi), ax=f_top
                 )

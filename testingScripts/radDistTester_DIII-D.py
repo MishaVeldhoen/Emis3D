@@ -20,9 +20,9 @@ from main.Tokamak import Tokamak
 from main.Util import config_loader
 
 tokamakName = "DIII-D"
-configFileName = "helical_config.yaml"  # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"  #
-elongation = 2.0
-polSigma = 0.05
+configFileName = "184407_injectionLocation_225/helical_config.yaml" # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"  #
+elongation = 0.2 # 2.0
+polSigma = 0.3 # 0.05
 rotationAngle = 0.0
 rzvalues = [2.0, 0.56]
 
