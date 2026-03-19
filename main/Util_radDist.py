@@ -19,11 +19,13 @@ import numpy as np
 import main.radDist as radDist
 import main.Util as Util
 import numba as nb
+import matplotlib.path
+from main.Tokamak import Tokamak
 
 
 def radDist_ElongatedRing_parallel(
     args: tuple, return_result: bool = False
-) -> None | radDist.ElongatedRing:
+):  # -> None | radDist.ElongatedRing:
     """
     Worker function for parallel computation of ElongatedRing radial distribution.
 
@@ -51,7 +53,7 @@ def radDist_ElongatedRing_parallel(
 
 def radDist_Helical_parallel(
     args: tuple, return_result: bool = False
-) -> None | radDist.Helical:
+):  # -> None | radDist.Helical:
     """
     Worker function for parallel computation of Helical radial distribution.
 
@@ -77,7 +79,7 @@ def radDist_Helical_parallel(
 
 def radDist_HelicalRing_parallel(
     args: tuple, return_result: bool = False
-) -> None | radDist.HelicalRing:
+):  # -> None | radDist.HelicalRing:
     """
     Worker function for parallel computation of Helical radial distribution.
 
@@ -103,7 +105,7 @@ def radDist_HelicalRing_parallel(
 
 def radDist_SquareTube_parallel(
     args: tuple, return_result: bool = False
-) -> None | radDist.SquareTube:
+):  # -> None | radDist.SquareTube:
     """
     Worker function for parallel computation of Square Tube radial distribution.
 
@@ -125,62 +127,87 @@ def radDist_SquareTube_parallel(
         return squareTube
 
 
-def callRZGridTokamak(tokamak, numRgrid=30, numZgrid=15) -> np.ndarray:
+def callRZGridTokamak(
+    tokamak: Tokamak | None = None,
+    num_r: int = 30,
+    num_z: int = 15,
+) -> np.ndarray | None:
     """
     Calls createRZgrid using the tokamak class as an input
-    """
-    rLimits = [tokamak.wall["minr"], tokamak.wall["maxr"]]
-    zLimits = [tokamak.wall["minz"], tokamak.wall["maxz"]]
 
-    rzarray = createRZGrid(
-        rLimits=rLimits,
-        zLimits=zLimits,
-        numRgrid=numRgrid,
-        numZgrid=numZgrid,
-        wallcurve=tokamak.wall["wallcurve"],
-    )
-    return rzarray
+    Parameters
+    ----------
+    tokamak   : Tokamak class instance.
+    num_r     : number of equally spaced R points.
+    num_z     : number of equally spaced z points.
+
+    Returns
+    -------
+    rzarray : np.ndarray, shape (N, 2)
+        Columns are [R, z]. N ≤ num_r x num_z depending on wall masking.
+    """
+
+    rzarray = None
+    if tokamak is not None:
+        if tokamak.wall is not None:
+            rLimits = (tokamak.wall["minr"], tokamak.wall["maxr"])
+            zLimits = (tokamak.wall["minz"], tokamak.wall["maxz"])
+
+            rzarray = createRZGrid(
+                r_limits=rLimits,
+                z_limits=zLimits,
+                num_r=num_r,
+                num_z=num_z,
+                wallcurve=tokamak.wall["wallcurve"],
+            )
+            return rzarray
 
 
 def createRZGrid(
-    rLimits=[0, 1], zLimits=[-1, 1], numRgrid=30, numZgrid=15, wallcurve=None
+    r_limits: tuple[float, float],
+    z_limits: tuple[float, float],
+    num_r: int = 30,
+    num_z: int = 15,
+    wallcurve: "matplotlib.path.Path | None" = None,
 ) -> np.ndarray:
     """
-    Creates a equally spaced R, z grid within the given limits.
-    The program will eliminate points outside of the wall, if
-    the wallcurve is specified (from the Tokamak class)
+    Create a uniform R-z grid, optionally masked to points inside the wall.
 
-    INPUTS
+    Parameters
+    ----------
+    r_limits  : (r_min, r_max) in metres.
+    z_limits  : (z_min, z_max) in metres.
+    num_r     : number of equally spaced R points.
+    num_z     : number of equally spaced z points.
+    wallcurve : matplotlib Path defining the wall boundary (from
+                Tokamak._load_first_wall()). If None, all grid points
+                are returned.
 
-    rLimits :: List of R min and R max points
-    zLimits :: List of z min and z max points
-    wallcurve :: Created within the tokamak class when _load_first_wall() is called.
-                 Type: path.Path(rzarray)
-    numRgrid :: The number of equally spaced points within the R grid
-    numZgrid :: The number of equally spaced points within the z grid
+    Returns
+    -------
+    rzarray : np.ndarray, shape (N, 2)
+        Columns are [R, z]. N ≤ num_r x num_z depending on wall masking.
     """
 
-    rarray = np.linspace(rLimits[0], rLimits[1], num=numRgrid)
-    zarray = np.linspace(zLimits[0], zLimits[1], num=numZgrid)
+    R_vals = np.linspace(*r_limits, num_r)
+    z_vals = np.linspace(*z_limits, num_z)
 
-    # we now have our RZ grid specified. We will now reduce the size by
-    # omitting points outside the first wall
-    rzarray = []
-    for j in range(numZgrid):
-        for i in range(numRgrid):
-            if wallcurve is not None:
-                # --- Only save the point if it is inside of the wall
-                if wallcurve.contains_points([(rarray[i], zarray[j])]):
-                    rzarray.append([rarray[i], zarray[j]])
-            else:
-                rzarray.append([rarray[i], zarray[j]])
+    RR, ZZ = np.meshgrid(R_vals, z_vals, indexing="ij")
+    rzarray = np.column_stack([RR.ravel(), ZZ.ravel()])
 
-    return np.array(rzarray)
+    if wallcurve is not None:
+        inside = wallcurve.contains_points(rzarray)
+        rzarray = rzarray[inside]
+    return rzarray
 
 
 def random_uniform_point_noVolume(Wallcurve, Minr, Maxr, Minz, Maxz):
-
+    """
+    Candidate points are drawn uniformly from the bounding box and
+    rejected if outside the wall polygon
+    """
     x = y = z = r = phi = None  # Initialize variables to ensure they are always defined
+
     success = 0
     while success == 0:
         x = random.uniform(-Maxr, Maxr)

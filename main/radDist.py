@@ -16,7 +16,6 @@ import os
 
 import numpy as np
 from cherab.tools.emitters import RadiationFunction
-from matplotlib import cm
 from raysect.optical import VolumeTransform  # type: ignore
 
 import main.Util_radDist as Util_radDist
@@ -24,7 +23,7 @@ from main.Globals import *
 from main.Tokamak import Tokamak
 from main.Util import XY_To_RPhi, convert_arrays_to_list, save_json
 import matplotlib.pyplot as plt
-
+from scipy.integrate import simpson
 from abc import ABC, abstractmethod
 
 
@@ -180,53 +179,15 @@ class RadDist(ABC):
         dict of {emissionName: np.ndarray}
         """
 
-        """
-        # --- Filling up the other arrays if they are only of length 1
-        R = np.asarray(R)
-        z = np.asarray(z)
-        phi = np.asarray(phi)
-
-        # ── Reconcile R and z lengths ────────────────────────────────────────────
-        if len(R) == 1 and len(z) == 1:
-            pass  # both scalar, nothing to broadcast
-        elif len(R) == 1:
-            R = np.full(len(z), R[0])
-        elif len(z) == 1:
-            z = np.full(len(R), z[0])
-        elif len(R) != len(z):
-            raise ValueError(
-                f"R (len={len(R)}) and z (len={len(z)}) must be the same length, "
-                "or one of them must be length 1."
-            )
-
-        # ── Broadcast phi to the reconciled length ───────────────────────────────
-        n_points = len(R)
-        if len(phi) == 1:
-            phi = np.full(n_points, phi[0])
-        elif len(phi) != n_points:
-            raise ValueError(
-                f"phi (len={len(phi)}) must be length 1 or match R/z (len={n_points})."
-            )
-        """
-
         # --- First call _evaluate to get the emissivity, then check if it is inside the tokamak, if not return 0
         # emiss format: {emissionName: np.array[self._evalutate(R0,z0,phi0) self._evalutate(R1,z1,phi1, ...]}
         # aka, it is an array of emission at each R, z, and phi location
         emiss = self._evaluate(R, z, phi, emissionName=emissionName)
 
-        """
-        points = np.column_stack((R, z))
-        inside = self.tokamak._inside_tokamak(points)
-
-        # --- Multiply the emissivity by 1 if inside, 0 if outside
-        # result = np.zeros_like(inside, dtype=float)
-        # result[inside] = 1.0  # WAS 1.0e9 for some reason....
-
-        # Return the emissivity values for each point, setting to 0 if outside the tokamak
-        for emissionName in emiss:
-            emiss[emissionName][~inside] = 0.0
-            # emiss[emissionName] *= result
-        """
+        # --- Zero out points outside the tokamak wall
+        inside = self.tokamak._inside_tokamak(np.column_stack([R, z]))
+        for name in emiss:
+            emiss[name][~inside] = 0.0
 
         return emiss
 
@@ -240,10 +201,94 @@ class RadDist(ABC):
         """
 
         # self.power_per_bin_calc()
-        self.data = {}
+        self.calc_radiated_power()
         self.bolos_observe()
         self._get_scale_factor()
         self.saveRadDist()
+
+    # --- Testing out a new powerPerBin calculation, utilizing simposon integration instead of a monte carlo method
+    def _total_radiated_power(
+        self,
+        n_phi: int = 100,
+        n_poloidal: int = 200,
+        emissionName: str | None = None,
+    ) -> dict:
+        """
+        Compute total radiated power by deterministic quadrature.
+
+        Evaluates the poloidal integral P_pol(φ) at each toroidal location:
+            P_pol(φ) = ∫∫_wall ε(R, z, φ) · R dR dz
+
+        Parameters
+        ----------
+        n_phi      : int — number of toroidal quadrature points.
+        n_poloidal : int — number of points along each poloidal axis.
+        emissionName : str, optional — defaults to self.emissionName.
+
+        Returns
+        -------
+        dict with keys:
+            phi_array : (n_phi,)  toroidal angles evaluated (radians).
+            P_pol     : (n_phi,)  poloidal integral at each phi.
+            P_total   : float     total radiated power assuming toroidal symmetry (W).
+        """
+
+        wall = self.tokamak.wall
+
+        if wall is None:
+            raise RuntimeError(
+                "Initilize the tokamak prior to calling _total_radiated_power"
+            )
+
+        # -- Full grid creation
+        R_vals = np.linspace(wall["minr"], wall["maxr"], n_poloidal)
+        z_vals = np.linspace(wall["minz"], wall["maxz"], n_poloidal)
+        RR, ZZ = np.meshgrid(R_vals, z_vals, indexing="ij")
+        R_flat = RR.ravel()
+        z_flat = ZZ.ravel()
+
+        phi_array = np.linspace(0, 2.0 * np.pi, n_phi, endpoint=False)
+
+        # --- Poloidal integral P_pol(φ) at each toroidal location
+        P_pol = np.zeros(n_phi)
+
+        for i, phi in enumerate(phi_array):
+
+            phi_arr = np.full(len(R_flat), phi)
+
+            # --- Caclulate the emissivity at that toroidal location
+            result = self.calc_emissivity(
+                R_flat, z_flat, phi_arr, emissionName=emissionName
+            )
+            emiss = result[emissionName]  # (N_inside,)
+
+            # Reshape grid for integration
+            emis_grid = (emiss * R_flat).reshape(n_poloidal, n_poloidal)
+
+            inner = simpson(emis_grid, x=z_vals, axis=1)  # (n_poloidal,)
+            P_pol[i] = simpson(inner, x=R_vals)
+
+        # ── 4. Total power assuming toroidal symmetry ─────────────────────────────
+        P_total = simpson(P_pol, x=phi_array)
+
+        return {
+            "phi_array": phi_array,
+            "P_pol": P_pol,
+            "P_total": P_total,
+        }
+
+    def calc_radiated_power(self):
+        """
+        Calculates the radiated power around the vessel
+
+        """
+
+        self.data = {}
+        self.data["toroidalRadiatedPower"] = {}
+        for emissionName in self.info["emissionNames"]:
+            self.data["toroidalRadiatedPower"][emissionName] = (
+                self._total_radiated_power(emissionName=emissionName)
+            )
 
     def power_per_bin_calc(
         self, Errfrac: float = 0.01, Pointsupdate: int = int(1e5)
@@ -257,6 +302,7 @@ class RadDist(ABC):
         self.data["emisSumArray"] = {}
         self.data["emisSqArray"] = {}
         self.data["powerPerBin"] = {}
+        self.data["phi"] = []
 
         numBins = self.info["numBins"]
         angleperbin = 2.0 * np.pi / numBins
@@ -314,6 +360,7 @@ class RadDist(ABC):
 
                 # --- use the initial point for each toroidal bin
                 phi = np.array(phifirstbin_) + (angleperbin * numbin)
+                self.data["phi"].append(phi)
 
                 # Add the emission to the existing arrays
                 for emissionName in self.info["emissionNames"]:
@@ -528,9 +575,17 @@ class RadDist(ABC):
                 "Tokamak wall is not initialized. Ensure that the wall attribute is set before calling plotCrossSection()."
             )
 
-        RZarray = Util_radDist.callRZGridTokamak(
-            self.tokamak, numRgrid=500, numZgrid=500
+        rLimits = (self.tokamak.wall["minr"], self.tokamak.wall["maxr"])
+        zLimits = (self.tokamak.wall["minz"], self.tokamak.wall["maxz"])
+
+        RZarray = Util_radDist.createRZGrid(
+            rLimits, zLimits, num_r=200, num_z=200, wallcurve=None
         )
+        if RZarray is None:
+            raise RuntimeError(
+                "The RZarray returned with Util_radDist.callRZGridTokamak is None!"
+            )
+
         R = np.ascontiguousarray(RZarray[:, 0].ravel(), dtype=np.float64)
         z = np.ascontiguousarray(RZarray[:, 1].ravel(), dtype=np.float64)
 
@@ -552,7 +607,9 @@ class RadDist(ABC):
         z_unique = RZarray[:, 1]
         n_levels = 50
 
-        cf = ax.tricontourf(R_unique, z_unique, emiss, levels=n_levels, cmap="CMRmap_r")
+        cf = ax.tricontourf(
+            R_unique, z_unique, emiss, levels=n_levels
+        )  # , cmap="CMRmap_r")
         ax.tricontour(
             R_unique,
             z_unique,
@@ -674,30 +731,11 @@ class RadDist(ABC):
             else:
                 plt.show()
 
+    @abstractmethod
     def saveRadDist(self) -> None:
         """
-        Saves the data and radDist information
+        Abstract method to be implemented by subclasses to save the radDist
         """
-
-        # --- Convert items within the self.info and self.data to lists
-        toSave = {
-            "info": convert_arrays_to_list(self.info),
-            "data": convert_arrays_to_list(self.data),
-        }
-
-        # --- Save the data
-        folderName = f"{self.info['distType']}_elongation_{self.info['elongation']}_polSigma_{self.info['polSigma']}_rotation{self.info['rotationAngle']}"
-        saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
-
-        pathFileName = os.path.join(
-            EMIS3D_INPUTS_DIRECTORY,
-            self.info["tokamakName"],
-            "radDists",
-            self.info["saveRunsDirectoryName"],
-            folderName,
-        )
-
-        save_json(toSave, pathFileName, saveFileName)
 
     @abstractmethod
     def _scaling_factor(
@@ -766,7 +804,7 @@ class Helical(RadDist):
 
         # sigma_target must come from config; fall back to a small offset only
         # if not provided so the intent is explicit rather than a magic number.
-        sigma_target = self.info.get("sigmaTarget", sigma_kernel + 0.01)
+        sigma_target = self.info.get("polSigma", sigma_kernel + 0.01)
         self.info["sigma_target"] = sigma_target
 
         points, weights = Util_radDist.bivariate_normal_isodensity_points(
@@ -857,6 +895,31 @@ class Helical(RadDist):
             rev_number = int(emissionName.split("rev")[-1])
 
         return [phi + rev_number * 2.0 * np.pi] * num_channels
+
+    def saveRadDist(self) -> None:
+        """
+        Saves the data and radDist information
+        """
+
+        # --- Convert items within the self.info and self.data to lists
+        toSave = {
+            "info": convert_arrays_to_list(self.info),
+            "data": convert_arrays_to_list(self.data),
+        }
+
+        # --- Save the data
+        folderName = f"{self.info['distType']}_polSigma_{self.info['polSigma']}_sigmaKernel{self.info['sigmaKernel']}"
+        saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
+
+        pathFileName = os.path.join(
+            EMIS3D_INPUTS_DIRECTORY,
+            self.info["tokamakName"],
+            "radDists",
+            self.info["saveRunsDirectoryName"],
+            folderName,
+        )
+
+        save_json(toSave, pathFileName, saveFileName)
 
 
 class HelicalRing(RadDist):
@@ -1025,6 +1088,31 @@ class HelicalRing(RadDist):
 
         return [phi + rev_number * 2.0 * np.pi] * num_channels
 
+    def saveRadDist(self) -> None:
+        """
+        Saves the data and radDist information
+        """
+
+        # --- Convert items within the self.info and self.data to lists
+        toSave = {
+            "info": convert_arrays_to_list(self.info),
+            "data": convert_arrays_to_list(self.data),
+        }
+
+        # --- Save the data
+        folderName = f"{self.info['distType']}_polSigma_{self.info['polSigma']}_rotation{self.info['rotationAngle']}"
+        saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
+
+        pathFileName = os.path.join(
+            EMIS3D_INPUTS_DIRECTORY,
+            self.info["tokamakName"],
+            "radDists",
+            self.info["saveRunsDirectoryName"],
+            folderName,
+        )
+
+        save_json(toSave, pathFileName, saveFileName)
+
 
 class ElongatedRing(RadDist):
     """
@@ -1115,6 +1203,31 @@ class ElongatedRing(RadDist):
         phi = np.deg2rad(float(bolo_info["CAMERA_POSITION_R_Z_PHI"][2]))
 
         return [float(phi)] * numChan
+
+    def saveRadDist(self) -> None:
+        """
+        Saves the data and radDist information
+        """
+
+        # --- Convert items within the self.info and self.data to lists
+        toSave = {
+            "info": convert_arrays_to_list(self.info),
+            "data": convert_arrays_to_list(self.data),
+        }
+
+        # --- Save the data
+        folderName = f"{self.info['distType']}_polSigma_{self.info['polSigma']}_rotation{self.info['rotationAngle']}"
+        saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
+
+        pathFileName = os.path.join(
+            EMIS3D_INPUTS_DIRECTORY,
+            self.info["tokamakName"],
+            "radDists",
+            self.info["saveRunsDirectoryName"],
+            folderName,
+        )
+
+        save_json(toSave, pathFileName, saveFileName)
 
 
 class SquareTube(RadDist):
@@ -1211,3 +1324,28 @@ class SquareTube(RadDist):
         phi = np.deg2rad(float(bolo_info["CAMERA_POSITION_R_Z_PHI"][2]))
 
         return [float(phi)] * numChan
+
+    def saveRadDist(self) -> None:
+        """
+        Saves the data and radDist information
+        """
+
+        # --- Convert items within the self.info and self.data to lists
+        toSave = {
+            "info": convert_arrays_to_list(self.info),
+            "data": convert_arrays_to_list(self.data),
+        }
+
+        # --- Save the data
+        folderName = f"{self.info['distType']}_polSigma_{self.info['polSigma']}_rotation{self.info['rotationAngle']}"
+        saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
+
+        pathFileName = os.path.join(
+            EMIS3D_INPUTS_DIRECTORY,
+            self.info["tokamakName"],
+            "radDists",
+            self.info["saveRunsDirectoryName"],
+            folderName,
+        )
+
+        save_json(toSave, pathFileName, saveFileName)

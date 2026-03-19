@@ -4,7 +4,7 @@
 # --- Machine parameters
 MACHINE:
   device: 'DIII-D'
-  volume:  19.5 # m3
+  volume:  28.7748 # 19.5 # m3
   majorRadius: 1.67 # m
   minorRadius: 0.67 # m
   wallFileName: 'V1_FirstWall.txt'

@@ -220,7 +220,7 @@ if False:
     print(f"Difference: {np.sum(tot_rD - tot)}")
 
 # --- Try it out at the bolometer locations, compare new old vectorization techniques
-if True:
+if False:
     # --- Plot the field lines at the relevant locations
     phis = [startPhi, 270, 270, 135]
     groupNames = ["", "SX90PF", "SX90MF", "DISRADU"]

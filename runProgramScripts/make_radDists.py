@@ -98,17 +98,17 @@ if __name__ == "__main__":
     if len(config["GRID"]["rLimits"]) == 0 or len(config["GRID"]["zLimits"]) == 0:
         rzArray = Util_radDist.callRZGridTokamak(
             tok,
-            numRgrid=config["GRID"]["NumRStartGrid"],
-            numZgrid=config["GRID"]["NumZStartGrid"],
+            num_r=config["GRID"]["NumRStartGrid"],
+            num_z=config["GRID"]["NumZStartGrid"],
         )
 
     else:
         if tok.wall is not None:
             rzArray = Util_radDist.createRZGrid(
-                rLimits=config["GRID"]["rLimits"],
-                zLimits=config["GRID"]["zLimits"],
-                numRgrid=config["GRID"]["NumRStartGrid"],
-                numZgrid=config["GRID"]["NumZStartGrid"],
+                r_limits=config["GRID"]["rLimits"],
+                z_limits=config["GRID"]["zLimits"],
+                num_r=config["GRID"]["NumRStartGrid"],
+                num_z=config["GRID"]["NumZStartGrid"],
                 wallcurve=tok.wall["wallcurve"],
             )
 

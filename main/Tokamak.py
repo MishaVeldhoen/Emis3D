@@ -395,18 +395,24 @@ class Tokamak(object):
         self.info["Bolometer R Limits"] = r_limits
         self.info["Bolometer Z Limits"] = z_limits
 
-    def _inside_tokamak(self, points) -> bool:
+    def _inside_tokamak(self, points: np.ndarray) -> np.ndarray:
         """
-        Checks to see if the np.column_stacked R, z points are within the tokamak wall
+        Check whether (R, z) points lie within the tokamak wall.
+
+        Parameters
+        ----------
+        points : np.ndarray, shape (N, 2) — column-stacked [R, z] coordinates.
+
+        Returns
+        -------
+        inside : np.ndarray of bool, shape (N,)
         """
         if self.wall is None:
             raise RuntimeError(
-                "Tokamak wall is not initialized. Ensure that the wall attribute is set before calling inside_tokamak()."
+                "Tokamak wall not initialised — ensure _load_first_wall() "
+                "has been called before using _inside_tokamak()."
             )
-
-        wallcurve = self.wall["wallcurve"]
-
-        return wallcurve.contains_points(points)
+        return self.wall["wallcurve"].contains_points(points)
 
     def _make_raysect_surface_transparent(self, surfaceName="") -> None:
         """

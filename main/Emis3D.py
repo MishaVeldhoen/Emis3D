@@ -1213,10 +1213,13 @@ class Emis3D:
         self.bestFits[evalTime]["powerPerBin"] = {}
         powerPerBin = self.bestFits[evalTime]["powerPerBin"]
 
+        """
         # --- Find the phi location for each bin range
         numBins = radDist_.info["numBins"]
         phibin = np.linspace(0, 2.0 * np.pi, numBins + 1)
         phibin_center = (phibin[:-1] + phibin[1:]) / 2.0
+        """
+
         mu = self.bestFits[evalTime]["synthetic_dict"]["injectionLocation_rad"]
 
         x_all = []
@@ -1225,7 +1228,10 @@ class Emis3D:
         # --- Unwrap and combine the powerPerBin for both radiation distribution functions
         for emissionName in emissionNames:
             powerPerBin[emissionName] = {}
-            ppb_amp = np.array(radDist_.data["powerPerBin"][emissionName]).copy()
+            phibin_center = radDist_.data["toroidalRadiatedPower"][emissionName][
+                "phi_array"
+            ]
+            ppb_amp = radDist_.data["toroidalRadiatedPower"][emissionName]["P_pol"]
 
             # --- elongatedRing distributions are symmetric, so we can skip a lot of this
             if emissionName == "elongatedRing":
