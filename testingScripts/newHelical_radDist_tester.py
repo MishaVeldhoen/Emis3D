@@ -5,6 +5,8 @@ the creation point (aka injection location)
 
 Perhaps start out with many field lines, with each of those having a Gaussian distribution?
 Then we add them together to get the radDist
+
+This is now the Helical radDist, the old one is now helicalRing
 """
 
 
@@ -19,12 +21,14 @@ import main.Util_radDist as Util_radDist
 from main.Globals import *
 from main.Tokamak import Tokamak
 from main.Util import config_loader
-
+import time
+import main.radDist as radDist
 
 tokamakName = "DIII-D"
+configFileName = "helical_config.yaml"
 startPhi = 225
-R0 = 2.029
-z0 = 0.409
+R0_initial = 2.029
+z0_initial = 0.409
 
 
 colors = ["purple", "red", "blue", "green", "purple", "orange"]
@@ -114,19 +118,10 @@ sigma_target = 0.06
 sigma_kernel = 0.05  # pol_sigma
 n = 2_000
 points, weights = Util_radDist.bivariate_normal_isodensity_points(
-    R0, z0, sigma_target, sigma_kernel, n, seed=42
+    R0_initial, z0_initial, sigma_target, sigma_kernel, n, seed=42
 )
 Rvalues = points[:, 0]  # + R0
 zValues = points[:, 1]  # + z0
-
-
-"""
-Rvalues = points[:, 0]
-zValues = points[:, 1]
-plt.ion()
-plt.figure()
-plt.scatter(Rvalues, zValues)
-"""
 
 
 tok.set_fieldlines(
@@ -138,34 +133,59 @@ tok.set_fieldlines(
 
 # --- Initial test at the injection location
 if False:
+    emissionName = "counterClock_rev0"
+    RZarray = Util_radDist.callRZGridTokamak(tok, numRgrid=500, numZgrid=500)
+
+    # --- Test the current implementation of a radDist
+    # --- Create the radDist using only one point, we don't need to loop over everything
+    pathFileName = os.path.join(
+        EMIS3D_INPUTS_DIRECTORY, tokamakName, "radDists", configFileName
+    )
+    config = config_loader(pathFileName)
+    if config is None:
+        raise FileNotFoundError(f"Could not load config file: {pathFileName}")
+    config["polSigma"] = sigma_kernel
+    config["numFieldLines"] = n
+    rD = radDist.Helical(startR=R0_initial, startZ=z0_initial, config=config)
+
+    R = RZarray[:, 0]
+    z = RZarray[:, 1]
+    phi = np.array([np.deg2rad(startPhi)])
+
+    ans = rD.calc_emissivity(R, z, phi, emissionName=emissionName)
+    tot_rD = ans[emissionName]
+
     # --- Each field line will be a bivariate normal, let's caclculate the
     # scale factor for points that are not in the center
-    emissionName = "counterClock_rev0"
-    R, z = tok.find_RZ_Fline(
+    R0_arr, z0_arr = rD.tokamak.find_RZ_Fline(
         str(startPhi),
         emissionName=emissionName,
         inputPhis=[np.deg2rad(startPhi)],
     )
 
-    # ans = Util_radDist.bivariate_normal(R=R, R0=R[0], z=z, z0=z[0], pol_sigma=0.05)
-    # scale = ans / ans[0]
+    R = np.ascontiguousarray(R.ravel(), dtype=np.float64)
+    z = np.ascontiguousarray(z.ravel(), dtype=np.float64)
+    R0_arr = np.ascontiguousarray(R0_arr.ravel(), dtype=np.float64)
+    z0_arr = np.ascontiguousarray(z0_arr.ravel(), dtype=np.float64)
 
-    # R = [R[0], np.array(1.5)]
-    # z = [z[0], np.array(0.0)]
-    # --- Create a R, z grid. Find the total simulated radiation at that toroidal location
-    RZarray = Util_radDist.callRZGridTokamak(tok, numRgrid=500, numZgrid=500)
-    tot = np.zeros(len(RZarray))
+    tot2 = Util_radDist._evaluate_kernels(
+        RZarray[:, 0], RZarray[:, 1], R, z, rD.info["weights"], pol_sigma=sigma_kernel
+    )
 
     # --- This function will be replaced by the _evalulate call, using x, y, and z cherab inputs
     # instead of a pre-defined grid
-    for (Ri, zi), w, R0, z0 in zip(points, weights, R, z):
+    tot = np.zeros(len(RZarray))
+    for (Ri, zi), w, R0, z0 in zip(points, weights, R0_arr, z0_arr):
         tot += w * Util_radDist.bivariate_normal(
             R=RZarray[:, 0], z=RZarray[:, 1], R0=R0, z0=z0, pol_sigma=sigma_kernel
         )
 
-    f = plt.figure()
-    ax = f.add_subplot(111)
+    plt.ion()
+    f = plt.figure(figsize=(8, 6))
+    ax = f.add_subplot(121)
+    ax1 = f.add_subplot(122)
     tok._plot_first_wall(ax)
+    tok._plot_first_wall(ax1)
     R_unique = RZarray[:, 0]
     z_unique = RZarray[:, 1]
     n_levels = 50
@@ -180,90 +200,152 @@ if False:
         linewidths=0.4,
         alpha=0.4,
     )
+    ax.set_title("Manual")
     plt.colorbar(cf, ax=ax, label="Density")
+
+    cf = ax1.tricontourf(R_unique, z_unique, tot_rD, levels=n_levels, cmap="plasma")
+    ax1.tricontour(
+        R_unique,
+        z_unique,
+        tot_rD,
+        levels=n_levels,
+        colors="white",
+        linewidths=0.4,
+        alpha=0.4,
+    )
+    ax1.set_title("From radDist class")
+    plt.colorbar(cf, ax=ax1, label="Density")
+    plt.tight_layout()
     plt.show()
+    print(f"Difference: {np.sum(tot_rD - tot)}")
 
+# --- Try it out at the bolometer locations, compare new old vectorization techniques
+if True:
+    # --- Plot the field lines at the relevant locations
+    phis = [startPhi, 270, 270, 135]
+    groupNames = ["", "SX90PF", "SX90MF", "DISRADU"]
+    plt.ion()
+    f, ax = plt.subplots(figsize=(18, 8), ncols=4, nrows=1)
 
-# --- Plot the field lines at the relevant locations
-phis = [startPhi, 270, 270, 135]
-groupNames = ["", "SX90PF", "SX90MF", "DISRADU"]
-plt.ion()
-f, ax = plt.subplots(figsize=(18, 8), ncols=4, nrows=1)
+    emissionNames = tok.fieldLines[str(startPhi)]["directionNames"]
 
-emissionNames = tok.fieldLines[str(startPhi)]["directionNames"]
-# emissionNames = ["counterClock_rev0"]
-for ii, ax_ in enumerate(ax.flat):
+    for ii, ax_ in enumerate(ax.flat):
 
-    # --- Find the simulated radiation at that location
-    RZarray = Util_radDist.callRZGridTokamak(tok, numRgrid=500, numZgrid=500)
-    tot = np.zeros(len(RZarray))
+        # --- Find the simulated radiation at that location
+        RZarray = Util_radDist.callRZGridTokamak(tok, numRgrid=500, numZgrid=500)
 
-    for qq, emissionName in enumerate(emissionNames):
-        R, z = tok.find_RZ_Fline(
-            str(startPhi),
-            emissionName=emissionName,
-            inputPhis=[np.deg2rad(phis[ii])],
-        )
-
-        for (Ri, zi), w, R0, z0 in zip(points, weights, R, z):
-            tot += w * Util_radDist.bivariate_normal(
-                R=RZarray[:, 0], z=RZarray[:, 1], R0=R0, z0=z0, pol_sigma=sigma_kernel
+        tot = np.zeros(len(RZarray))
+        tot_vec = np.zeros(len(RZarray))
+        for qq, emissionName in enumerate(emissionNames):
+            R0_arr, z0_arr = tok.find_RZ_Fline(
+                str(startPhi),
+                emissionName=emissionName,
+                inputPhis=[np.deg2rad(phis[ii])],
             )
 
-        R_unique = RZarray[:, 0]
-        z_unique = RZarray[:, 1]
-        n_levels = 50
+            weights = weights
+            pol_sigma = sigma_kernel
 
-        cf = ax_.tricontourf(R_unique, z_unique, tot, levels=n_levels, cmap="CMRmap_r")
-        ax_.tricontour(
-            R_unique,
-            z_unique,
-            tot,
-            levels=n_levels,
-            colors="white",
-            linewidths=0.4,
-            alpha=0.4,
-        )
+            R = RZarray[:, 0]
+            z = RZarray[:, 1]
 
-        tok._plot_first_wall(ax_)
+            # --- Trying to speed everything up
+            t0 = time.time()
 
-        # --- Injection location
-        if ii == 0:
-            spi_path = pellet_initial_parameters(csp=False)
-            ax_.plot(
-                [spi_path["R_IN"], spi_path["R_OUT"]],
-                [spi_path["Z_IN"], spi_path["Z_OUT"]],
-                "-r",
-            )
-            ax_.plot(
-                [spi_path["R_IN_UPPER"], spi_path["R_OUT"]],
-                [spi_path["Z_IN_UPPER"], spi_path["Z_OUT"]],
-                "-r",
-            )
-            ax_.plot(
-                [spi_path["R_IN_LOWER"], spi_path["R_OUT"]],
-                [spi_path["Z_IN_LOWER"], spi_path["Z_OUT"]],
-                "-r",
+            # Squeeze out any spurious dimensions, ensure C-contiguous float64
+            R = np.ascontiguousarray(R.ravel(), dtype=np.float64)
+            z = np.ascontiguousarray(z.ravel(), dtype=np.float64)
+            R0_arr = np.ascontiguousarray(R0_arr.ravel(), dtype=np.float64)
+            z0_arr = np.ascontiguousarray(z0_arr.ravel(), dtype=np.float64)
+
+            tot_vec += Util_radDist._evaluate_kernels(
+                R,
+                z,
+                R0_arr,
+                z0_arr,
+                weights,
+                pol_sigma,
             )
 
-            ax_.plot(tok.gfile.rbbbs, tok.gfile.zbbbs, color="teal")
-            ax_.set_title("Injection location")
+            tf = time.time() - t0
 
-        # --- Plot the initial points
-        if False:
-            for jj in range(0, len(R.flatten())):
-                label = "__no_legend__"
-                if jj == 0:
-                    label = emissionName
+            # --- Old method -- used a for loop
+            t02 = time.time()
+            for w, R0, z0 in zip(weights, R0_arr, z0_arr):
+                tot += w * Util_radDist.bivariate_normal(
+                    R=RZarray[:, 0],
+                    z=RZarray[:, 1],
+                    R0=R0,
+                    z0=z0,
+                    pol_sigma=sigma_kernel,
+                )
+            tf2 = time.time() - t02
 
-                ax_.scatter(
-                    R[jj], z[jj], color=colors[qq], marker="s", label=label, zorder=10
+            # --- Sanity check both methods agree
+            print(f"New: {tf:.3f} s, Old: {tf2:.3f} s")
+            print(f"Max diff between methods: {np.abs(tot_vec - tot).max():.2e}")
+
+            R_unique = RZarray[:, 0]
+            z_unique = RZarray[:, 1]
+            n_levels = 50
+
+            cf = ax_.tricontourf(
+                R_unique, z_unique, tot_vec, levels=n_levels, cmap="CMRmap_r"
+            )
+            ax_.tricontour(
+                R_unique,
+                z_unique,
+                tot_vec,
+                levels=n_levels,
+                colors="white",
+                linewidths=0.4,
+                alpha=0.4,
+            )
+
+            tok._plot_first_wall(ax_)
+
+            # --- Injection location
+            if ii == 0:
+                spi_path = pellet_initial_parameters(csp=False)
+                ax_.plot(
+                    [spi_path["R_IN"], spi_path["R_OUT"]],
+                    [spi_path["Z_IN"], spi_path["Z_OUT"]],
+                    "-r",
+                )
+                ax_.plot(
+                    [spi_path["R_IN_UPPER"], spi_path["R_OUT"]],
+                    [spi_path["Z_IN_UPPER"], spi_path["Z_OUT"]],
+                    "-r",
+                )
+                ax_.plot(
+                    [spi_path["R_IN_LOWER"], spi_path["R_OUT"]],
+                    [spi_path["Z_IN_LOWER"], spi_path["Z_OUT"]],
+                    "-r",
                 )
 
-        # --- Plot the bolometers
-        if ii > 0:
-            tok._plot_bolometers(ax_, boloGroupName=groupNames[ii])
+                ax_.plot(tok.gfile.rbbbs, tok.gfile.zbbbs, color="teal")
+                ax_.set_title("Injection location")
 
-ax[1].legend()
-plt.tight_layout()
-plt.show()
+            # --- Plot the initial points
+            if False:
+                for jj in range(0, len(R.flatten())):
+                    label = "__no_legend__"
+                    if jj == 0:
+                        label = emissionName
+
+                    ax_.scatter(
+                        R[jj],
+                        z[jj],
+                        color=colors[qq],
+                        marker="s",
+                        label=label,
+                        zorder=10,
+                    )
+
+            # --- Plot the bolometers
+            if ii > 0:
+                tok._plot_bolometers(ax_, boloGroupName=groupNames[ii])
+
+    ax[1].legend()
+    plt.tight_layout()
+    plt.show()

@@ -9,11 +9,16 @@ TODO:
 over the whole tokamak while calculating the radiated power?
 """
 
+import os
+
+os.environ["KMP_WARNINGS"] = "FALSE"  # suppress the numba deprecation warning
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # the modern equivalent setting
 
 import random
 import numpy as np
 import main.radDist as radDist
 import main.Util as Util
+import numba as nb
 
 
 def radDist_ElongatedRing_parallel(
@@ -62,6 +67,32 @@ def radDist_Helical_parallel(
 
     rzArray, config = args
     helical = radDist.Helical(startR=rzArray[0], startZ=rzArray[1], config=config)
+    helical.build()
+
+    print(f"DONE with helical radDist, R = {rzArray[0]:.2f}m, z = {rzArray[1]:.2f}m")
+
+    if return_result:
+        return helical
+
+
+def radDist_HelicalRing_parallel(
+    args: tuple, return_result: bool = False
+) -> None | radDist.HelicalRing:
+    """
+    Worker function for parallel computation of Helical radial distribution.
+
+    Designed to be called via multiprocessing.Pool.map, which requires a single
+    argument. The args tuple is unpacked internally.
+
+    Parameters
+    ----------
+    args : tuple of (rz_array, config)
+        rz_array : array-like of length 2 — (R, z) start coordinates in metres.
+        config   : configuration object passed to radDist.Helical.
+    """
+
+    rzArray, config = args
+    helical = radDist.HelicalRing(startR=rzArray[0], startZ=rzArray[1], config=config)
     helical.build()
 
     print(f"DONE with helical radDist, R = {rzArray[0]:.2f}m, z = {rzArray[1]:.2f}m")
@@ -250,6 +281,39 @@ def bivariate_normal(
     exponent = -0.5 * ((R - R0) ** 2 + (z - z0) ** 2) / pol_sigma**2
 
     return norm * np.exp(exponent)
+
+
+@nb.njit(parallel=True, fastmath=True, cache=True)
+def _evaluate_kernels(R, z, R0_arr, z0_arr, weights, pol_sigma):
+    """
+    Fused, parallelised kernel evaluation — avoids allocating any (M, N) matrix.
+    Each output point is computed independently in parallel.
+
+    Parameters
+    ----------
+    R, z       : (N,) float64 — evaluation coordinates.
+    R0_arr, z0_arr : (M,) float64 — field line centres.
+    weights    : (M,) float64 — per-line weights.
+    pol_sigma  : float — kernel width.
+
+    Returns
+    -------
+    tot : (N,) float64
+    """
+    N = len(R)
+    M = len(weights)
+    norm = 1.0 / (2.0 * np.pi * pol_sigma**2)
+    inv_2sig2 = 0.5 / pol_sigma**2
+
+    tot = np.zeros(N)
+    for n in nb.prange(N):  # parallel over grid points
+        val = 0.0
+        for m in range(M):  # serial over field lines (stays in cache)
+            dR = R[n] - R0_arr[m]
+            dz = z[n] - z0_arr[m]
+            val += weights[m] * norm * np.exp(-inv_2sig2 * (dR * dR + dz * dz))
+        tot[n] = val
+    return tot
 
 
 def bivariate_normal_isodensity_points(
