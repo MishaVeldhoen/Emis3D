@@ -947,7 +947,7 @@ class HelicalRing(RadDist):
         )
 
         self.info["setFieldLine"] = setFieldLine
-        self.info["distType"] = "helical"
+        self.info["distType"] = "helicalring"
 
         # --- Create the field line to trace
         if setFieldLine:

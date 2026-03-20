@@ -287,3 +287,32 @@ def runParallel(job):
     )
 
     return fit_index, fit
+
+
+def error_exponential(signal, max_signal, scale_factor=1.0, decay=2.0):
+    """
+    Exponential decay: error = max_error * exp(-decay * signal / max_signal)
+    Normalized so error≈max_error at signal=0, error≈0 at signal=max_signal.
+    """
+    signal = np.clip(signal, 0, None)
+    norm = np.exp(-decay * signal / max_signal)
+
+    return scale_factor * norm / np.exp(0)
+
+
+def error_inverse(signal, max_signal, max_error=1.0):
+    """
+    Hyperbolic: error = max_error * (max_signal / signal)
+    Normalized so that signal=max_signal → error=1.0
+    """
+    signal = np.clip(signal, 0, None)
+    return max_error * (max_signal / signal)
+
+
+def error_inv_sqrt(signal, max_signal, max_error=1.0):
+    """
+    Inverse square root: error = max_error * sqrt(max_signal / signal)
+    Models Poisson/shot noise. error=1.0 at peak signal.
+    """
+    signal = np.clip(signal, 0, None)
+    return max_error * np.sqrt(max_signal / signal)

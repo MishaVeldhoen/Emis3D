@@ -90,7 +90,7 @@ from main.Util import (
     read_h5,
 )
 from main.radDistFitting import RadDistFitting
-from main.radDist import Helical, ElongatedRing
+from main.radDist import Helical, ElongatedRing, HelicalRing
 from scipy.integrate import simpson
 import time
 import dill
@@ -620,13 +620,11 @@ class Emis3D:
 
                     bolo_ = self.channel_order["bolometer_order"][ii]
 
-                    """
                     # --- Find the max value in all the channels
                     max_ = 0
                     for channel in channels:
                         if data_[channel] > max_:
                             max_ = data_[channel]
-                    """
 
                     for channel in channels:
                         temp.append(data_[channel])
@@ -634,7 +632,14 @@ class Emis3D:
                         # --- Large error for zero signal
                         err_ = np.float64(1.0e4)
                         if data_[channel] > 1.0:
-                            err_ = 1.0 * max_ / np.sqrt((data_[channel]))
+                            err_frac = Util_emis3D.error_exponential(
+                                data_[channel], max_, scale_factor=1.0
+                            )
+
+                            err_ = data_[channel] * err_frac
+                            print(
+                                f"err frac {err_frac:.2e}, signal {data_[channel]:.2e}, max {max_:.2e}, error {err_:.2e}"
+                            )
 
                         temp_e.append(err_)
 
@@ -976,16 +981,19 @@ class Emis3D:
         # --- Gather the radDist information
         if location is None:
             rad_ = self.data["synthetic"][locationDependence][radDistNumber]
-
         else:
             rad_ = self.data["synthetic"][locationDependence][location][radDistNumber]
 
         info = rad_.info
         # --- Create the radDist
-        if info["distType"] == "helical":
-            radDist_ = Helical(config=rad_.info, setFieldLine=False)
-        elif info["distType"] == "elongatedRing":
+        if info["distType"].lower() == "helical":
+            radDist_ = Helical(
+                config=rad_.info, startR=rad_.info["startR"], startZ=rad_.info["startZ"]
+            )
+        elif info["distType"].lower() == "elongatedring":
             radDist_ = ElongatedRing(config=rad_.info)
+        elif info["distType"].lower() == "helicalring":
+            radDist_ = HelicalRing(config=rad_.info)
         else:
             print(f"self_rebuild_radDist() only supports Helical or ElongatedRing")
             return
@@ -1387,10 +1395,10 @@ class Emis3D:
                 tok._plot_bolometers(f_top, boloName)
 
                 # --- Add the radDist plot
-                phi = np.deg2rad(bolo_.info["CAMERA_POSITION_R_Z_PHI"][2])
+                phi = bolo_.info["CAMERA_POSITION_R_Z_PHI"][2]
                 if hasattr(self, "bestFits"):
                     self.bestFits[evalTime]["radDist"].plotCrossSection(
-                        phi=phi, ax=f_top
+                        phi=np.deg2rad(phi), ax=f_top
                     )
             f_top.set_title(boloName)
 
