@@ -28,7 +28,7 @@ from raysect.core import (
 from raysect.optical import AbsorbingSurface, NullMaterial  # type:ignore
 from main.Globals import *
 from main.Util import RPhi_To_XY, config_loader, rotate_vector
-from raysect.primitive import Box, Subtract
+from raysect.primitive import Box, Subtract, import_obj
 
 
 class Bolometer(object):
@@ -48,7 +48,7 @@ class Bolometer(object):
         self.world = world
         self.configFileName = configFileName
         self._load_config_file(tokamakName=tokamakName)
-        self._build()
+        self._build(tokamakName=tokamakName)
 
     def _load_config_file(self, tokamakName) -> None:
         """
@@ -97,7 +97,7 @@ class Bolometer(object):
                         config_loader(pathFileName)
                     )
 
-    def _build(self) -> None:
+    def _build(self, tokamakName) -> None:
         """
         Definition to build the camera. This will call the correct definition based
         on the data within the bolometer configuration file
@@ -105,6 +105,8 @@ class Bolometer(object):
         if self.info is not None and "BUILD_TYPE" in self.info:
             if self.info["BUILD_TYPE"] == "FROM PRIMITIVES":
                 self._build_from_primitives()
+            elif self.info["BUILD_TYPE"] == "WITH CAD":
+                self._build_with_cad(tokamakName=tokamakName)
             elif self.info["BUILD_TYPE"] == "KB5V":
                 self.load_kb5_camera(camera_id="KB5V", parent=self.world)
             else:
@@ -237,7 +239,168 @@ class Bolometer(object):
             dy=SLIT_HEIGHT,
             dz=SLIT_THICKNESS,
             parent=bolometer_camera,
-            csg_aperture=True,
+            csg_aperture=False,
+        )
+
+        # --- Create the sensor node behind the slit
+        sensor = Node(
+            name=f"{self.info['NAME']} sensor",
+            parent=bolometer_camera,
+            transform=translate(0, 0, -SLIT_SENSOR_SEPARATION),
+        )
+
+        # --- Create the foils relative to the sensor
+        for ii, shift in enumerate(FOIL_POSITIONS):
+
+            # Older version
+            foil_transform = translate(shift * FOIL_SEPARATION, 0, 0) * sensor.transform
+            foil = BolometerFoil(
+                detector_id=self.info["CHANNEL_TAGS"][ii],
+                centre_point=ORIGIN.transform(foil_transform),
+                basis_x=XAXIS.transform(foil_transform),
+                dx=FOIL_WIDTH,
+                basis_y=YAXIS.transform(foil_transform),
+                dy=FOIL_HEIGHT,
+                slit=slit,
+                parent=bolometer_camera,
+                accumulate=False,
+                curvature_radius=FOIL_CORNER_CURVATURE,
+            )
+
+            bolometer_camera.add_foil_detector(foil)
+
+        # --- Translate the camera to the correct position
+        origin_xyz = Vector3D(*CAMERA_POSITION_X_Y_Z)
+
+        # --- Tilt the camera downward if it is downward facing
+        sign = -1 if self.info["CAMERA_DOWNWARD_FACING"] else 1
+        tilt_rad = sign * np.deg2rad(self.info["CAMERA_ROTATION"])
+
+        e_R = Vector3D(np.cos(CAMERA_PHI_RAD), np.sin(CAMERA_PHI_RAD), 0).normalise()
+        e_z = ZAXIS
+        e_phi = e_z.cross(e_R).normalise()
+
+        # Rotate e_z in R–z plane
+        view_dir = rotate_vector(e_z, e_phi, tilt_rad).normalise()
+
+        # Build orthonormal basis
+        z_axis = view_dir  # Camera z-axis: the direction the camera "looks"
+        y_axis = e_phi  # Camera y-axis: e_phi (toroidal direction)
+        # Camera x-axis: y × z to form right-handed coordinate system
+        x_axis = y_axis.cross(z_axis).normalise()
+        # --- Force orthogonality for safety
+        y_axis = z_axis.cross(x_axis).normalise()
+
+        # Build full rotation matrix from orthonormal basis
+        basis_matrix = AffineMatrix3D(
+            [
+                x_axis.x,
+                y_axis.x,
+                z_axis.x,
+                origin_xyz.x,
+                x_axis.y,
+                y_axis.y,
+                z_axis.y,
+                origin_xyz.y,
+                x_axis.z,
+                y_axis.z,
+                z_axis.z,
+                origin_xyz.z,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+            ]
+        )
+
+        # Construct transform matrix
+        bolometer_camera.transform = basis_matrix
+
+        self.bolometer_camera = bolometer_camera
+
+    def _build_with_cad(self, tokamakName) -> None:
+        """
+        Builds the bolometer, using housing loaded from a CAD file rather than
+        housing built from Cherab primitives
+
+        Notes:
+        If two arrays are close together, it is best to include them within the same
+        "bounding box," otherwise some of the raytraced chords might intersect the neighboring
+        box
+
+        This will be an array of channels corresponding to the NUM_CHANNELS
+        and CHANNEL_TAGS parameters within the sxr configuration file
+
+        The transform command should probably be split off into its own definition, since
+        it should be universal
+        """
+
+        if self.info is None:
+            print(
+                "Bolometer configuration info is missing; cannot build from primitives."
+            )
+            return
+
+        # --- Convenient constants
+        XAXIS = Vector3D(1, 0, 0)
+        YAXIS = Vector3D(0, 1, 0)
+        ZAXIS = Vector3D(0, 0, 1)
+        ORIGIN = Point3D(0, 0, 0)
+
+        # --- Constants from the configuration file
+        SLIT_WIDTH = self.info["SLIT_WIDTH"]
+        SLIT_HEIGHT = self.info["SLIT_HEIGHT"]
+        SLIT_THICKNESS = 50.0e-6
+        FOIL_WIDTH = self.info["FOIL_WIDTH"]
+        FOIL_HEIGHT = self.info["FOIL_HEIGHT"]
+        FOIL_CORNER_CURVATURE = self.info["FOIL_CORNER_CURVATURE"]
+        SLIT_SENSOR_SEPARATION = self.info["SLIT_SENSOR_SEPARATION"]
+        FOIL_SEPARATION = self.info["FOIL_SEPARATION"]
+        FOIL_POSITIONS = self.info["FOIL_POSITIONS"]
+        CAMERA_POSITION_R_Z_PHI = self.info["CAMERA_POSITION_R_Z_PHI"]
+        HOUSING_CAD_FILE = self.info["HOUSING_CAD_FILE"]
+        CAMERA_PHI_RAD = np.deg2rad(CAMERA_POSITION_R_Z_PHI[2])
+        x, y = RPhi_To_XY(CAMERA_POSITION_R_Z_PHI[0], CAMERA_PHI_RAD)
+        CAMERA_POSITION_X_Y_Z = (x, y, CAMERA_POSITION_R_Z_PHI[1])
+
+
+        # -------------------------------------------------------------------------
+        # 1. Create the camera node FIRST so all geometry can be parented to it.
+        #    This ensures that any transform on bolometer_camera moves everything.
+        # -------------------------------------------------------------------------
+        bolometer_camera = BolometerCamera(parent=self.world, name="bolometer_camera")
+
+        # -------------------------------------------------------------------------
+        # 2. Load the housing CAD
+        # -------------------------------------------------------------------------
+        housing_filepath = join(
+            EMIS3D_TOKMAK_DIRECTORY,
+            tokamakName,
+            "inputs",
+            "sxrInfo",
+            HOUSING_CAD_FILE,
+        )
+        scaling=1 # depends on the units of the CAD file
+        camera_housing = import_obj(housing_filepath,\
+                scaling=scaling, parent=bolometer_camera,\
+                name="Housing from CAD")
+
+        camera_housing.material = AbsorbingSurface() # NullMaterial
+
+        # # Attach the finished housing to the camera
+        # bolometer_camera.camera_geometry = camera_housing
+
+        # --- Create a slit at the camera origin
+        slit = BolometerSlit(
+            slit_id=f"{self.info['NAME']} slit",
+            centre_point=ORIGIN,
+            basis_x=XAXIS,
+            dx=SLIT_WIDTH,
+            basis_y=YAXIS,
+            dy=SLIT_HEIGHT,
+            dz=SLIT_THICKNESS,
+            parent=bolometer_camera,
+            csg_aperture=False,
         )
 
         # --- Create the sensor node behind the slit

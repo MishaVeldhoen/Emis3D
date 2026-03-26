@@ -16,13 +16,13 @@ from main.Tokamak import Tokamak
 
 
 t = Tokamak(
-    tokamakName="DIII-D",
+    tokamakName="JET",
     mode="Build",
     reflections=False,
     loadBolometers=True,
 )
 
-plt.ion()
+#plt.ion()
 
 """
 # Plot in 3D to see if it is at the correct toroidal location
@@ -47,7 +47,7 @@ if t.info is not None:
             f_,
             boloGroupName=boloGroup,
             plot_chord_info=True,
-            plot_etendue=["SX45F07"],
+            #plot_etendue=["SX45F07"],
             legend=True,
         )
 

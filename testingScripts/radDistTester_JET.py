@@ -19,6 +19,8 @@ from main.Globals import *
 from main.Tokamak import Tokamak
 from main.Util import config_loader
 
+import pdb
+
 tokamakName = "JET"
 configFileName = "elongatedRing_config.yaml"  # "helical_config.yaml"  #
 elongation = 0.2
@@ -43,12 +45,11 @@ tok = Tokamak(
     verbose=True,
 )
 
-
-for bolo in tok.bolometers:
-    for foil in bolo.bolometer_camera:
-        print(f"\n----->{foil.name}<-----")
-        print(f"Slit width: {foil.slit.dx:.4f} m")
-        print(f"Slit height: {foil.slit.dy:.4f} m")
+# for bolo in tok.bolometers:
+#     for foil in bolo.bolometer_camera:
+#         print(f"\n----->{foil.name}<-----")
+#         print(f"Slit width: {foil.slit.dx:.4f} m")
+#         print(f"Slit height: {foil.slit.dy:.4f} m")
 
 rzArray = Util_radDist.callRZGridTokamak(
     tok,
