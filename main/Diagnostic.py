@@ -222,7 +222,7 @@ class Bolometer(object):
             name="Housing with Aperture",
         )
 
-        camera_housing.material = NullMaterial()  # AbsorbingSurface() NullMaterial
+        camera_housing.material = NullMaterial()  # AbsorbingSurface() or NullMaterial()
 
         # Attach the finished housing to the camera
         bolometer_camera.camera_geometry = camera_housing
@@ -237,7 +237,7 @@ class Bolometer(object):
             dy=SLIT_HEIGHT,
             dz=SLIT_THICKNESS,
             parent=bolometer_camera,
-            csg_aperture=True,
+            csg_aperture=False,  # This messes the JET bolometers up if it is set to True
         )
 
         # --- Create the sensor node behind the slit
@@ -322,10 +322,18 @@ class Bolometer(object):
         Taken from the Cherab demo:
         https://www.cherab.info/demonstrations/bolometry/calculate_etendue.html
 
-        Raytracing is not used here, since we did not load any CAD files for the bolometer.
-
-        Can add it in the future, so I just left the commented-out code here.
+        NOTE: If the ETENDUE is in the config file, the program will use that instead
+        of any calculated values
         """
+
+        if self.info is not None and "ETENDUE" in self.info:
+            self.etendues = self.info["ETENDUE"]
+            self.etendues_error = (
+                self.info["ETENDUE_ERROR"]
+                if "ETENDUE_ERROR" in self.info
+                else [0.0] * len(self.etendues)
+            )
+            return
 
         self.etendues = []
         self.etendues_error = []

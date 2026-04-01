@@ -58,6 +58,8 @@ if __name__ == "__main__":
     # This should be the path after /inputs/{tokamak}/radDists/:
     tokamakName = "DIII-D"
     configFileName = "helical_config.yaml"  # "elongatedRing_config.yaml"
+    tokamakName = "JET"
+    configFileName = "elongatedRing_config.yaml"  # "elongatedRing_config.yaml"
     # ------------------------------------------------------
     # --- Do not change anything below this line ---
     # ------------------------------------------------------
@@ -92,10 +94,12 @@ if __name__ == "__main__":
         reflections=False,
         eqFileName=config["eqFileName"],
     )
+
     rzArray = None
 
     # --- Load the tokamak if rArray and zArray are blank in the configuration file
     if len(config["GRID"]["rLimits"]) == 0 or len(config["GRID"]["zLimits"]) == 0:
+        print("upper")
         rzArray = Util_radDist.callRZGridTokamak(
             tok,
             num_r=config["GRID"]["NumRStartGrid"],
@@ -104,6 +108,7 @@ if __name__ == "__main__":
 
     else:
         if tok.wall is not None:
+
             rzArray = Util_radDist.createRZGrid(
                 r_limits=config["GRID"]["rLimits"],
                 z_limits=config["GRID"]["zLimits"],
@@ -128,7 +133,6 @@ if __name__ == "__main__":
                     num_split = 1
                     if rzArray.shape[0] > (numProcessors - 1.0):
                         num_split = np.floor((rzArray.shape[0] / (numProcessors - 1.0)))
-
                     rzArray_split = np.array_split(rzArray, num_split)
                     for rz in rzArray_split:
                         # --- Skip rotation angle if the elongation and polSigma are equal (aka a circle)

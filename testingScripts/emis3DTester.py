@@ -36,33 +36,20 @@ import os
 import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-import matplotlib.pyplot as plt
+
 import numpy as np
-
-import main.Emis3D as Emis3D
-import scipy.integrate
-import multiprocessing as mp
-import main.Util_emis3D as Util_emis3D
-
-evalTimes = np.arange(2119, 2127, 0.3)
-
-phi = []
-powerPerBin = []
-chisq = []
-pf = []
-mf = []
-dis = []
-tpf = []
-t = None
+from main.Emis3D import Emis3D
 
 
-evalTime = 2120.5
+evalTime = 50.9555  # 2120.5
 
-tokamakName = "DIII-D"
-runConfigName = "184407/184407_runConfig.yaml"
+# tokamakName = "DIII-D"
+tokamakName = "JET"
+# runConfigName = "184407/184407_runConfig.yaml"
+runConfigName = "95709/95709_runConfig.yaml"
 verbose = True
 
-t = Emis3D.Emis3D(
+t = Emis3D(
     tokamakName=tokamakName,
     runConfigName=runConfigName,
     verbose=verbose,

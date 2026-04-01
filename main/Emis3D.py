@@ -620,11 +620,13 @@ class Emis3D:
 
                     bolo_ = self.channel_order["bolometer_order"][ii]
 
-                    # --- Find the max value in all the channels
+                    # --- Find the max value for that specific array
+                    """
                     max_ = 0
                     for channel in channels:
                         if data_[channel] > max_:
                             max_ = data_[channel]
+                    """
 
                     for channel in channels:
                         temp.append(data_[channel])

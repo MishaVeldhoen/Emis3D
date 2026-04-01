@@ -16,7 +16,7 @@ from main.Tokamak import Tokamak
 
 
 t = Tokamak(
-    tokamakName="DIII-D",
+    tokamakName="JET",
     mode="Build",
     reflections=False,
     loadBolometers=True,
