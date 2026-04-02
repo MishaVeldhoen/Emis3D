@@ -70,6 +70,10 @@ Biggest Issues:
 3. Re-vist how error is calculated for the observed data
 
 
+BUG:
+1. Program crashes when using an averaging window of 0.0001 for JET data? Is this smaller than the time resolution
+or something?
+
 """
 
 import os
@@ -639,9 +643,9 @@ class Emis3D:
                             )
 
                             err_ = data_[channel] * err_frac
-                            print(
-                                f"err frac {err_frac:.2e}, signal {data_[channel]:.2e}, max {max_:.2e}, error {err_:.2e}"
-                            )
+                            # print(
+                            #    f"err frac {err_frac:.2e}, signal {data_[channel]:.2e}, max {max_:.2e}, error {err_:.2e}"
+                            # )
 
                         temp_e.append(err_)
 
@@ -1384,6 +1388,17 @@ class Emis3D:
         )
 
         bolometers = self.info["BOLOMETERS"]
+        units = self.bestFits[evalTime]["radDist"].info["units"]
+
+        if units == "Power":
+            units_label = "[W]"
+        elif units == "Radiance":
+            units_label = "[W / (m2 sr)]"
+        elif units == "Brightness":
+            units_label = "[W / m2]"
+        else:
+            units_label = "[arb]"
+
         num_columns = len(bolometers) + 1
         f = plt.figure(figsize=(15, 8))
 
@@ -1458,7 +1473,7 @@ class Emis3D:
                     label=f"{emissionName} emission",
                 )
                 f_bottom.set_xlabel("Channel Number")
-                f_bottom.set_ylabel("Emission [arb. units]")
+                f_bottom.set_ylabel(f"Emission {units_label}")
                 f_bottom.set_title(f"{bolo_}")
 
             f_bottom.plot(
@@ -1501,7 +1516,7 @@ class Emis3D:
         tpf_plot.set_xlabel("phi [degrees]")
         tpf_plot.set_ylabel(f"radiation [$10^{scale}$ arb]")
         tpf_plot.set_title(
-            f"time = {evalTime:.1f} ms, TPF: {self.bestFits[float(evalTime)]["powerPerBin"]["total"]["toroidal_peaking_factor"]:.2f}"
+            f"time = {evalTime:.2f} ms, TPF: {self.bestFits[float(evalTime)]["powerPerBin"]["total"]["toroidal_peaking_factor"]:.2f}"
         )
 
         plt.tight_layout()
@@ -1512,7 +1527,7 @@ class Emis3D:
                 and "shot" in self.info
                 and "tokamakName" in self.info
             ):
-                filename = f"{self.info['shot']}_{evalTime:.2f}.png"
+                filename = f"{self.info['shot']}_{evalTime:.3f}.png"
                 pathFileName = join(
                     EMIS3D_INPUTS_DIRECTORY,
                     self.info["tokamakName"],
@@ -1562,9 +1577,9 @@ class Emis3D:
             if len(keys) > 1:
                 min = np.min(keys)
                 max = np.max(keys)
-                filename = f"{self.info['shot']}_bestFits_{min:.2f}_to_{max:.2f}.dill"
+                filename = f"{self.info['shot']}_bestFits_{min:.3f}_to_{max:.3f}.dill"
             else:
-                filename = f"{self.info['shot']}_bestFits_{keys[0]:.2f}.dill"
+                filename = f"{self.info['shot']}_bestFits_{keys[0]:.3f}.dill"
 
             pathFileName = join(
                 EMIS3D_INPUTS_DIRECTORY,

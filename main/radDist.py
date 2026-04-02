@@ -424,13 +424,15 @@ class RadDist(ABC):
         Example found here:
         https://www.cherab.info/demonstrations/bolometry/observing_radiation_function.html#bolometer-observing-radiation
         """
-        # Should be Power or Radiance
+        # Should be Power, Radiance, or Brightness
         units = self.info["units"]
 
         if units == "Power":
             self.data["units"] = "Power [W]"
         elif units == "Radiance":
             self.data["units"] = "Radiance [W / (m2 sr)]"
+        elif units == "Brightness":
+            self.data["units"] = "Brightness [W / m2]"
 
         # --- Initilize the data storage arrays
         boloCameras = self.tokamak.bolometers
@@ -452,7 +454,7 @@ class RadDist(ABC):
         self._update_bolometer_properties()
 
         # --- Calculate etendue's if asking for radiance
-        if units == "Radiance":
+        if units in ["Radiance", "Brightness"]:
             self.tokamak.calc_etendues()
 
         # --- Populate world with emitter, this cannot be a seperate definition!
@@ -498,7 +500,7 @@ class RadDist(ABC):
                     try:
                         foil.units = units
                         foil.observe()
-                        if units == "Radiance":
+                        if units in ["Radiance", "Brightness"]:
                             # sightline = foil.as_sightline()
                             # sightline.observe()
                             # ans = sightline.pipelines[0].value.mean
@@ -518,11 +520,11 @@ class RadDist(ABC):
                                     fractional_solid_angle = (
                                         bolo_.etendues[jj] / foil.sensitivity
                                     )
-                                    ans = (
+                                    radiance = (
                                         foil.pipelines[0].value.mean
                                         / fractional_solid_angle
                                     )
-                                    ans_error = (
+                                    radiance_error = (
                                         np.hypot(
                                             foil.pipelines[0].value.error()
                                             / foil.pipelines[0].value.mean,
@@ -531,9 +533,16 @@ class RadDist(ABC):
                                         )
                                         * ans
                                     )
+                                    if units == "Brightness":
+                                        ans = radiance * np.pi
+                                        ans_error = radiance_error / radiance * ans
+                                    elif units == "Radiance":
+                                        ans = radiance
+                                        ans_error = radiance_error
+
                             except Exception as e:
                                 print(
-                                    f"An error occured while observing the radiance, {e}"
+                                    f"An error occured while observing the radiance or brightness, {e}"
                                 )
 
                                 print(f"Etendue {bolo_.etendues[jj]}")

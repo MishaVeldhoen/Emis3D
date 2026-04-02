@@ -102,7 +102,7 @@ for i, shift in enumerate([0.0]):
         dy=FOIL_HEIGHT,
         slit=slit,
         parent=bolometer_camera,
-        units="Power",
+        units="Brightness",
         accumulate=False,
         curvature_radius=0,
     )
