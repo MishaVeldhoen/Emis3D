@@ -498,7 +498,14 @@ class RadDist(ABC):
                     ans = 0
                     ans_error = 1.0e3
                     try:
-                        foil.units = units
+
+                        if units == "Brightness":
+                            # --- The units need to be power or radiance for the sightline to observe,
+                            # conversion to Brightness is done after observing
+                            foil.units = "Radiance"
+                        else:
+                            foil.units = units
+
                         foil.observe()
                         if units in ["Radiance", "Brightness"]:
                             # sightline = foil.as_sightline()
@@ -555,7 +562,6 @@ class RadDist(ABC):
                                 )
 
                         elif units == "Power":
-
                             ans = foil.pipelines[0].value.mean
                             ans_error = foil.pipelines[0].value.error()
 

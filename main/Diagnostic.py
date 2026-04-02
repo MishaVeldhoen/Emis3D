@@ -263,6 +263,7 @@ class Bolometer(object):
                 parent=bolometer_camera,
                 accumulate=False,
                 curvature_radius=FOIL_CORNER_CURVATURE,
+                units="Radiance",  # Default units, changed during radDist.bolos_observe() to match the radDist config file
             )
 
             bolometer_camera.add_foil_detector(foil)

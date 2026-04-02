@@ -21,7 +21,7 @@ from main.Emis3D import Emis3D
 
 tokamakName = "JET"
 configFileName = (
-    "elongatedRing_config.yaml"  # helical_config.yaml, or elongatedRing_config.yaml
+    "helical_config.yaml"  # helical_config.yaml, or elongatedRing_config.yaml
 )
 rzvalues = [2.897, 1.39]
 
