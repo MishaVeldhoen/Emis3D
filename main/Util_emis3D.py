@@ -15,33 +15,31 @@ from scipy.special import i0
 from lmfit import minimize
 
 
-def _exp(dphi=np.ndarray(()), kappa=0.0) -> "np.ndarray":
+def _exp(dphi: np.ndarray, kappa: float = 0.0) -> np.ndarray:
     """Exponential function"""
     return np.exp(-1.0 * kappa * (dphi**2))
 
 
-def scale_exp(A=0.0, B=0.0, dphi=np.ndarray(())) -> "np.ndarray":
+def scale_exp(A: float, B: float, dphi: np.ndarray) -> np.ndarray:
     raw = _exp(dphi, B)
     normalized = raw / _exp(np.zeros(1), B)
     return A * normalized
 
 
-def scale_linear(A=0.0, B=0.0, dphi=np.ndarray(())) -> "np.ndarray":
+def scale_linear(A: float, B: float, dphi: np.ndarray) -> np.ndarray:
     return A * dphi + B
 
 
-def scale_constant(A=0.0, dphi=np.ndarray(())) -> "np.ndarray":
+def scale_constant(A: float, dphi: np.ndarray) -> np.ndarray:
     return A * np.ones(dphi.shape[0])
 
 
-def _von_mises(dphi=np.ndarray(()), kappa=0.0) -> "np.ndarray":
+def _von_mises(dphi: np.ndarray, kappa: float = 0.0) -> np.ndarray:
     """Von Mises distribution, normalized"""
     return np.exp(kappa * np.cos(dphi)) / (2.0 * np.pi * i0(kappa))
 
 
-def von_mises_amplitude(
-    A=0.0, B=0.0, dphi=np.ndarray(()), mu=0.0, emissionName=None
-) -> "np.ndarray":
+def von_mises_amplitude(A: float, B: float, dphi: np.ndarray) -> np.ndarray:
     """
     Apply scaling to Von Mises distribution, while ensuring that the
     endpoints are equal.
@@ -50,39 +48,36 @@ def von_mises_amplitude(
     right : theta-mu in (0, pi], clockwise
     """
 
-    # --- Normalize VM so the value at mu = 1.0
-    # theta = mu, so dphi = mu - mu = 0
+    # --- Normalize VM so the value at mu = 1.0 (theta = mu -> dphi = 0)
     raw = _von_mises(dphi, B)
     normalized = raw / _von_mises(np.zeros(1), B)
     return A * normalized
 
 
 def scale_wrapper(
-    a=0.0,
-    b=0.0,
-    phi=np.ndarray(()),
-    mu=0.0,
-    scale_def=None,
-    emissionName=None,
-    dphi=None,
-    numRevolutions=1.0,
+    a: float,
+    b: float,
+    phi: np.ndarray,
+    mu: float = 0.0,
+    scale_def: str | None = None,
+    emissionName: str | None = None,
+    dphi: np.ndarray | None = None,
+    numRevolutions: float = 1.0,
 ):
     """
-    Wrapper for the scale function, returns scaling factor
-    based off the scale_def.
+    Wrapper for the scale function; returns a scaling factor array based on
+    the chosen scale_def.
 
-    A         :: float
-                 The amplitude of the scaling function
-    B         :: float
-                 Value used by most scaling functions
-    theta     :: np.ndarray (radians)
-                 Location of the bolomter
-    mu        :: float (radians)
-                 injection location
-    scale_def ::
-
-
-    Returns :: np.ndarray
+    Parameters
+    ----------
+    a             : Amplitude of the scaling function
+    b             : Shape parameter used by most scaling functions
+    phi           : Toroidal locations of the bolometers (radians)
+    mu            : Injection location (radians)
+    scale_def     : One of 'exponential', 'linear', 'constant', 'von_mises'
+    emissionName  : Name of the emission distribution (e.g. 'clockwise')
+    dphi          : Pre-computed dphi; calculated from phi/mu if None
+    numRevolutions: Number of toroidal revolutions for helical distributions
     """
 
     # --- Find dphi
@@ -91,48 +86,49 @@ def scale_wrapper(
             phi, mu, emissionName=str(emissionName), numRevolutions=numRevolutions
         )
 
-    # --- Set a = 0 for small values of a
+    # --- Set small values of a to zero
     if a < 0.01:
         a = 0
-    if scale_def == "exponential":
-        scale_ = scale_exp(a, b, dphi)
-    elif scale_def == "linear":
-        scale_ = scale_linear(a, b, dphi)
-    elif scale_def == "constant":
-        scale_ = scale_constant(a, dphi)
-    elif scale_def == "von_mises":
-        scale_ = von_mises_amplitude(a, b, dphi, emissionName=emissionName)
-    else:
-        scale_ = np.ones(phi.shape[0])
 
-    return scale_
+    if scale_def == "exponential":
+        return scale_exp(a, b, dphi)
+    elif scale_def == "linear":
+        return scale_linear(a, b, dphi)
+    elif scale_def == "constant":
+        return scale_constant(a, dphi)
+    elif scale_def == "von_mises":
+        return von_mises_amplitude(a, b, dphi)
+    else:
+        return np.ones(phi.shape[0])
 
 
 def find_dphi(
-    phi=np.ndarray(()), mu=0.0, emissionName="", scale=True, numRevolutions=1.0
-) -> "np.ndarray":
+    phi: np.ndarray,
+    mu: float = 0.0,
+    emissionName: str = "",
+    scale: bool = True,
+    numRevolutions: float = 1.0,
+) -> np.ndarray:
     """
-    Finds the change in toroidal angle between the inputs phi and mu. Example:
-    phi = 220, mu = 100, dphi = 120 or 240 depending on the emssionName input. Output is in radians.
+    Finds the change in toroidal angle between phi and mu.
+    Example: phi = 220, mu = 100, dphi = 120 or 240 depending on the emssionName input.
 
-    It will also correct the phi location for helical fits based on if the direction is
-    counterClock (0, pi], or clockwise [-pi, 0). It will also scale phi
-    by 0.5 since the helical distributions go 2pi if the mode is clockwise or counterClock. It
-    will not scale phi for other distributions.
 
-    phi  :  list (radians)
-            List of length of the number of channels of the toroidal location of the bolometer
-    mu   :  float
-            Typically the injection location
+    For helical distributions the result is also scaled by 0.5 (or
+    1 / (2 * numRevolutions)) so that the range maps to [-pi, pi].
 
-    emissionName : str
-        "clockwise"     -> dphi in the clockwise direction, as from looking down on the tokamak
-        "counterClock"  -> dphi in the counter clockwise direction
-        anything other than clockwise and counterClock   -> minimium distance between phi and mu
+    Parameters
+    ----------
+    phi           : Toroidal locations of the bolometers (radians)
+    mu            : Injection location (radians)
+    emissionName  : 'clockwise', 'counterClock', or anything else for minimum
+                    angular distance
+    scale         : Whether to scale helical dphi into [-pi, pi]
+    numRevolutions: Total revolutions of the helical distribution
 
-    Returns:
-            dphi :: np.ndarray
-                    Corrected phi's in radians
+    Returns
+    -------
+    dphi : np.ndarray
     """
 
     two_pi = 2 * np.pi
@@ -143,45 +139,44 @@ def find_dphi(
     phi = phi % two_pi
     mu = mu % two_pi
 
-    cw = (mu - phi) % two_pi
-    ccw = (phi - mu) % two_pi
+    cw = (mu - phi) % two_pi  # clockwise distance
+    ccw = (phi - mu) % two_pi  # counter-clockwise distance
 
     # --- Correct for values that are greater than 2pi
     ccw[add_2pi] += two_pi
     cw[add_2pi] += two_pi
 
-    # --- Return values for helical distributions
+    # --- Helical distributions go a full revolution around the machine. Example:
+    # counter-clock goes from the injection location back to the injection location
+    # So we need to scale phi down to +/- pi for the fit, and scale it back up after
+    # the fit
+    #
+    # We also need to account for the total number of revolutions the helical distribution
+    # makes around the machine.
     if "clockwise" in emissionName:
-        # --- Helical distributions go a full revolution around the machine. Example:
-        # counter-clock goes from the injection location back to the injection location
-        # So we need to scale phi down to +/- pi for the fit, and scale it back up after
-        # the fit
-        #
-        # We also need to account for the total number of revolutions the helical distribution
-        # makes around the machine.
-        if scale:
-            return -1.0 * cw / (2.0 * numRevolutions)
-        else:
-            return -1.0 * cw
+        return -cw / (2.0 * numRevolutions) if scale else -cw
     elif "counterClock" in emissionName:
-        if scale:
-            return ccw / (2.0 * numRevolutions)
-        else:
-            return ccw
+        return ccw / (2.0 * numRevolutions) if scale else ccw
 
-    # --- Return the shortest value, used for the elongated rings
-    else:
-        if sum(ccw) < sum(cw):
-            return ccw
-        else:
-            return -cw
+    # --- For non-helical distributions, return the shorter angular distance
+    return ccw if sum(ccw) < sum(cw) else -cw
 
 
 def residual(
-    pars, data_dict, synthetic_dict, scale_def=None, boloNames=None, residual=True
+    pars,
+    data_dict,
+    synthetic_dict,
+    scale_def: str | None = None,
+    boloNames=None,
+    residual: bool = True,
 ):
     """
-    Returns the residual for the fit
+    Computes the residual (or the scaled synthetic data) for the minimizer.
+
+    When ``residual=True`` returns a flat list of (data - model) values for
+    each bolometer channel (LMFIT squares these internally).
+    When ``residual=False`` returns a dict of scaled synthetic arrays keyed
+    by emissionName → bolometer-group index.
     """
 
     a = 0.0
@@ -190,13 +185,13 @@ def residual(
     mu = float(synthetic_dict["injectionLocation_rad"])
 
     # --- Find the total synthetic emission
-    temp_ = {}
-    data = {}
+    temp_ = {}  # accumulated model signal per bolometer group
+    data = {}  # per-emission scaled synthetic (returned when residual=False)
 
     for emissionName in synthetic_dict["emissionNames"]:
         # --- Find the number of revolutions the helical distribution makes,
         # it will return 0 for non-helical distributions
-        if "clockwise" or "counterClock" in emissionName:
+        if "clockwise" in emissionName or "counterClock" in emissionName:
             numRevolutions = len(synthetic_dict["emissionNames"]) / 2.0
         else:
             numRevolutions = 0.0
@@ -240,7 +235,6 @@ def residual(
                 temp_[ii] = np.zeros(len(scale_))
 
             temp_[ii] += scale_ * synth_
-
             data[emissionName][ii] = scale_ * synth_
 
     if residual and data_dict is not None:
@@ -253,15 +247,13 @@ def residual(
             # --- Make sure there are no zeros in the error
             data_error[data_error <= 1.0e-6] = 1.0e-6
 
-            # --- Ignore bad data points
+            # --- Ignore channels with non-positive observed values
             bad_indices = np.where(data_ <= 0)[0]
             temp_[ii][bad_indices] = data_[bad_indices]
 
+            # LMFIT minimises the sum of squares, so we return the raw residual
             numerator = data_ - temp_[ii]
-            # NOTE: LMFIT minimizes the sum of squares of the residuals
-            # so we do not need to square the residuals here
-            answer = convert_arrays_to_list(numerator)  # / data_error)
-            res.extend(answer)
+            res.extend(convert_arrays_to_list(numerator))  # / data_error)
 
         return res
     else:
@@ -269,6 +261,7 @@ def residual(
 
 
 def runParallel(job):
+    """Thin wrapper around residual minimisation for use with ProcessPoolExecutor."""
     boloNames = None
     res_ = True
     fit_index, pars, data_dict, synth_dict, scale_def = job
@@ -289,30 +282,46 @@ def runParallel(job):
     return fit_index, fit
 
 
-def error_exponential(signal, max_signal, scale_factor=1.0, decay=4.0):
+def error_exponential(
+    signal: np.ndarray,
+    max_signal: float,
+    scale_factor: float = 1.0,
+    decay: float = 4.0,
+) -> np.ndarray:
     """
-    Exponential decay: error = scale_factor * exp(-decay * signal / max_signal)
-    Normalized so error ~ scale_factor at signal=0, error≈0 at signal=max_signal.
-    """
-    signal = np.clip(signal, 0, None)
-    norm = np.exp(-decay * signal / max_signal)
+    Exponential decay error model.
 
-    return scale_factor * norm / np.exp(0)
+    error ≈ scale_factor at signal = 0
+    error ≈ 0            at signal = max_signal
+    """
+    signal = np.clip(signal, 0.0, None)
+    return scale_factor * np.exp(-decay * signal / max_signal)
 
 
-def error_inverse(signal, max_signal, scale_factor=1.0):
+def error_inverse(
+    signal: np.ndarray,
+    max_signal: float,
+    scale_factor: float = 1.0,
+    _floor: float = 1.0e-12,
+) -> np.ndarray:
     """
-    Hyperbolic: error = scale_factor * (max_signal / signal)
-    Normalized so that signal=scale_factor → error=1.0
+    Hyperbolic error model: error = scale_factor * (max_signal / signal).
     """
-    signal = np.clip(signal, 0, None)
+    signal = np.clip(signal, _floor, None)
     return scale_factor * (max_signal / signal)
 
 
-def error_inv_sqrt(signal, max_signal, scale_factor=1.0):
+def error_inv_sqrt(
+    signal: np.ndarray,
+    max_signal: float,
+    scale_factor: float = 1.0,
+    _floor: float = 1.0e-12,
+) -> np.ndarray:
     """
-    Inverse square root: error = scale_factor * sqrt(max_signal / signal)
-    Models Poisson/shot noise. error=1.0 at peak signal.
+    Inverse square-root (Poisson / shot-noise) error model.
+
+    error = scale_factor * sqrt(max_signal / signal)
+    error = 1.0 at peak signal.
     """
-    signal = np.clip(signal, 0, None)
+    signal = np.clip(signal, _floor, None)
     return scale_factor * np.sqrt(max_signal / signal)

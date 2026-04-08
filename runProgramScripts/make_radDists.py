@@ -99,7 +99,6 @@ if __name__ == "__main__":
 
     # --- Load the tokamak if rArray and zArray are blank in the configuration file
     if len(config["GRID"]["rLimits"]) == 0 or len(config["GRID"]["zLimits"]) == 0:
-        print("upper")
         rzArray = Util_radDist.callRZGridTokamak(
             tok,
             num_r=config["GRID"]["NumRStartGrid"],

@@ -47,7 +47,7 @@ def runParallel_with_global(job):
 if __name__ == "__main__":
 
     # --- Update these parameters:
-    evalTimes = [50.9529]  # np.arange(2119, 2127, 0.3)
+    evalTimes = [50.95, 50.952, 50.954, 50.956]  # np.arange(2119, 2127, 0.3)
     tokamakName = "JET"
     runConfigName = "95709/95709_runConfig.yaml"
     verbose = True
