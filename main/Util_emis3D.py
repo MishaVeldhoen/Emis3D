@@ -176,7 +176,8 @@ def residual(
     When ``residual=True`` returns a flat list of (data - model) values for
     each bolometer channel (LMFIT squares these internally).
     When ``residual=False`` returns a dict of scaled synthetic arrays keyed
-    by emissionName → bolometer-group index.
+    by emissionName → bolometer-group index. This is used to make synthetic data
+    in Emis3D._post_process_fit_arrangement()
     """
 
     a = 0.0
