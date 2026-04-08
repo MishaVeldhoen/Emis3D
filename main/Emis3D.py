@@ -1334,7 +1334,7 @@ class Emis3D:
         tpf_ax.set_xlabel("phi [degrees]")
         tpf_ax.set_ylabel(f"radiation [$10^{{{int(scale)}}}$ arb]")
         tpf_ax.set_title(
-            f"time = {evalTime:.2f} ms, "
+            f"time = {evalTime:.4f} ms, "
             f"TPF: {self.bestFits[float(evalTime)]['powerPerBin']['total']['toroidal_peaking_factor']:.2f}"
         )
 
@@ -1342,7 +1342,7 @@ class Emis3D:
 
         if save:
             if "shot" in self.info and "tokamakName" in self.info:
-                filename = f"{self.info['shot']}_{evalTime:.3f}.png"
+                filename = f"{self.info['shot']}_{evalTime:.4f}.png"
                 img_dir = join(
                     EMIS3D_INPUTS_DIRECTORY,
                     self.info["tokamakName"],
