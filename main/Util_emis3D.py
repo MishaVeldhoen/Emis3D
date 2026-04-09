@@ -16,17 +16,17 @@ from lmfit import minimize
 
 
 def _exp(dphi: np.ndarray, kappa: float = 0.0) -> np.ndarray:
-    """Exponential function"""
+    """Exponential function. Peak = 1.0 at dphi = 0."""
     return np.exp(-1.0 * kappa * (dphi**2))
 
 
 def scale_exp(A: float, B: float, dphi: np.ndarray) -> np.ndarray:
-    raw = _exp(dphi, B)
-    normalized = raw / _exp(np.zeros(1), B)
-    return A * normalized
+    """Gaussian (exponential) scaling. Peak is A at dphi = 0"""
+    return A * _exp(dphi, B)
 
 
 def scale_linear(A: float, B: float, dphi: np.ndarray) -> np.ndarray:
+    """Linear scaling, y = A * dphi + B"""
     return A * dphi + B
 
 
@@ -35,7 +35,7 @@ def scale_constant(A: float, dphi: np.ndarray) -> np.ndarray:
 
 
 def _von_mises(dphi: np.ndarray, kappa: float = 0.0) -> np.ndarray:
-    """Von Mises distribution, normalized"""
+    """Von Mises distribution, normalized to integrate to 1 over [-pi, pi]."""
     return np.exp(kappa * np.cos(dphi)) / (2.0 * np.pi * i0(kappa))
 
 
@@ -49,9 +49,7 @@ def von_mises_amplitude(A: float, B: float, dphi: np.ndarray) -> np.ndarray:
     """
 
     # --- Normalize VM so the value at mu = 1.0 (theta = mu -> dphi = 0)
-    raw = _von_mises(dphi, B)
-    normalized = raw / _von_mises(np.zeros(1), B)
-    return A * normalized
+    return A * _von_mises(dphi, B) / _von_mises(np.zeros(1), B)
 
 
 def scale_wrapper(
@@ -99,7 +97,7 @@ def scale_wrapper(
     elif scale_def == "von_mises":
         return von_mises_amplitude(a, b, dphi)
     else:
-        return np.ones(phi.shape[0])
+        return np.ones(dphi.shape[0])
 
 
 def find_dphi(
@@ -131,16 +129,23 @@ def find_dphi(
     dphi : np.ndarray
     """
 
+    if emissionName is None:
+        print(
+            f"Emission name in Util_emis3D.find_dphi is None. This should not happen..."
+        )
+        return
+
     two_pi = 2 * np.pi
 
     # --- Find if we need to add 2 pi to the end result
-    add_2pi = phi > two_pi
+    phi_ = np.atleast_1d(phi)
+    add_2pi = phi_ > two_pi
 
     phi = phi % two_pi
     mu = mu % two_pi
 
-    cw = (mu - phi) % two_pi  # clockwise distance
-    ccw = (phi - mu) % two_pi  # counter-clockwise distance
+    cw = np.atleast_1d((mu - phi) % two_pi)  # clockwise distance
+    ccw = np.atleast_1d((phi - mu) % two_pi)  # counter-clockwise distance
 
     # --- Correct for values that are greater than 2pi
     ccw[add_2pi] += two_pi
@@ -159,7 +164,8 @@ def find_dphi(
         return ccw / (2.0 * numRevolutions) if scale else ccw
 
     # --- For non-helical distributions, return the shorter angular distance
-    return ccw if sum(ccw) < sum(cw) else -cw
+    # return np.where(ccw <= cw, ccw, -cw)
+    return np.where(ccw <= cw, ccw, cw)
 
 
 def residual(

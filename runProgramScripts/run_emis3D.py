@@ -49,11 +49,11 @@ if __name__ == "__main__":
     # --- Update these parameters:
     evalTimes = [
         50.9534,
-        50.954,
-        50.955,
-        50.9556,
-        50.9569,
-        50.9627,
+        # 50.954,
+        # 50.955,
+        # 50.9556,
+        # 50.9569,
+        # 50.9627,
     ]  # np.arange(2119, 2127, 0.3)
     tokamakName = "JET"
     runConfigName = "95709/95709_runConfig.yaml"
