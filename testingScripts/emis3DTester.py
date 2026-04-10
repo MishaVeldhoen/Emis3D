@@ -41,7 +41,7 @@ import numpy as np
 from main.Emis3D import Emis3D
 
 
-evalTime = 50.9555  # 2120.5
+evalTime = 50.953  # 2120.5
 
 # tokamakName = "DIII-D"
 tokamakName = "JET"
@@ -55,8 +55,12 @@ t = Emis3D(
     verbose=verbose,
     initialize=True,
 )
-t._perform_fits(evalTime=evalTime, crossCalib=False)
-t._plot_bestFit(evalTime=evalTime, save=False)
+t._load_bestFits(
+    path="/Users/plh/Documents/git/Emis3D/inputs/JET/runs/95709/95709_bestFits_50.953.dill"
+)
+# t._perform_fits(evalTime=evalTime, crossCalib=False)
+# t._plot_bestFit(evalTime=evalTime, save=False)
+t._plot_bestFit(evalTime=50.953)
 
 """
 t._load_config_file(

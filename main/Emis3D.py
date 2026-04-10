@@ -432,8 +432,9 @@ class Emis3D:
         start = np.abs(time_ - (evalTime - dt_)).argmin()
         end = np.abs(time_ - (evalTime + dt_)).argmin()
 
+        # --- Average the data, include endpoint to prevent errors when dt is too small
         vals = np.mean(
-            self.data["observed"][arrayName]["DATA_CALIBRATED"][:, start:end],
+            self.data["observed"][arrayName]["DATA_CALIBRATED"][:, start : end + 1],
             axis=1,
         )
 
@@ -743,7 +744,7 @@ class Emis3D:
 
                     self.fits[evalTime]["chiSqVec"][ii] = self.fits[evalTime][ii][
                         "fit"
-                    ].chisqr.item()
+                    ].redchi
                 except Exception as e:
                     print(f"An error occured during the {ii} iteration: {e}")
                     self.fits[evalTime]["chiSqVec"][ii] = 1.0e19
@@ -924,7 +925,7 @@ class Emis3D:
         if radDist_.info is not None and "distType" in radDist_.info:
             emissionNames = (
                 ["clockwise", "counterClock"]
-                if radDist_.info["distType"] == "helical"
+                if radDist_.info["distType"].lower() == "helical"
                 else radDist_.info["emissionNames"]
             )
         else:
@@ -974,27 +975,6 @@ class Emis3D:
             phi_unwrapped = dphi[loc_] * dphi_scale + mu
             amplitude_ = scale_[loc_]
 
-            """
-            # OLD
-            # --- Add them to the total distribution
-            x_all.extend(phi_unwrapped)
-            y_all.extend(amplitude_)
-
-            # --- Wrap phi so it is from 0 to 2pi
-            phi_wrapped = np.mod(phi_unwrapped, 2.0 * np.pi)
-            sort_indx = np.argsort(phi_wrapped)
-
-            # --- Populate the arrays
-            rad_distribution[emissionName]["phi"] = phi_wrapped[sort_indx]
-            rad_distribution[emissionName]["amplitude"] = amplitude_[sort_indx]
-            rad_distribution[emissionName]["phi_unwrapped"] = phi_unwrapped
-            rad_distribution[emissionName]["amplitude_unwrapped"] = amplitude_
-            rad_distribution[emissionName]["phi_left_handed_deg"] = np.rad2deg(
-                2.0 * np.pi - phi_wrapped[sort_indx]
-            )
-
-        rad_distribution["total"] = {"phi": x_all, "amp": y_all}
-        """
             # Sort the unwrapped domain once for use in both the alias loop and
             # the per-emission wrapped storage below.
             sort_uw = np.argsort(phi_unwrapped)
@@ -1103,11 +1083,14 @@ class Emis3D:
 
                 # --- Arrange the data in ascending order
                 sort_ = np.argsort(dphi)
-                dphi_ = dphi[sort_] + mu + offset
+                # dphi_ = dphi[sort_] + mu + offset
 
                 # --- Clockwise data should be negative
                 if "clockwise" in emissionName:
-                    dphi_ *= -1.0
+                    dphi_ = -dphi[sort_] + mu + offset
+                    # OLD: dpi_ *= -1
+                else:
+                    dphi_ = dphi[sort_] + mu + offset
 
                 # --- Add mu back, then put it in the master array
                 x_all.extend(dphi_)

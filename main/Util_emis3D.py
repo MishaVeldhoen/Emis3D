@@ -34,11 +34,6 @@ def scale_constant(A: float, dphi: np.ndarray) -> np.ndarray:
     return A * np.ones(dphi.shape[0])
 
 
-def _von_mises(dphi: np.ndarray, kappa: float = 0.0) -> np.ndarray:
-    """Von Mises distribution, normalized to integrate to 1 over [-pi, pi]."""
-    return np.exp(kappa * np.cos(dphi)) / (2.0 * np.pi * i0(kappa))
-
-
 def von_mises_amplitude(A: float, B: float, dphi: np.ndarray) -> np.ndarray:
     """
     Apply scaling to Von Mises distribution, while ensuring that the
@@ -48,8 +43,7 @@ def von_mises_amplitude(A: float, B: float, dphi: np.ndarray) -> np.ndarray:
     right : theta-mu in (0, pi], clockwise
     """
 
-    # --- Normalize VM so the value at mu = 1.0 (theta = mu -> dphi = 0)
-    return A * _von_mises(dphi, B) / _von_mises(np.zeros(1), B)
+    return A * np.exp(B * (np.cos(dphi) - 1.0))
 
 
 def scale_wrapper(
@@ -164,8 +158,7 @@ def find_dphi(
         return ccw / (2.0 * numRevolutions) if scale else ccw
 
     # --- For non-helical distributions, return the shorter angular distance
-    # return np.where(ccw <= cw, ccw, -cw)
-    return np.where(ccw <= cw, ccw, cw)
+    return np.where(ccw <= cw, ccw, -cw)
 
 
 def residual(
@@ -260,7 +253,7 @@ def residual(
 
             # LMFIT minimises the sum of squares, so we return the raw residual
             numerator = data_ - temp_[ii]
-            res.extend(convert_arrays_to_list(numerator))  # / data_error)
+            res.extend(convert_arrays_to_list(numerator / data_error))
 
         return res
     else:
