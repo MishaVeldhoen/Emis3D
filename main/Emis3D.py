@@ -71,6 +71,10 @@ Biggest Issues:
     - Have the helical distribution change orientation (and shape?) as it goes around the vessel
     - Add a tomography radDist mapping function (like BOLT?)
 
+
+BUG:
+1. Is the total radiated power calculated correctly?
+
 """
 
 import os
@@ -1351,6 +1355,10 @@ class Emis3D:
             channels = np.arange(1, numChan + 1, 1)
 
             # --- Observed data
+            ymax = np.nanmax(
+                self.fitData[evalTime]["boloData"][bolo_]
+                + np.abs(self.fitData[evalTime]["boloData_error"][bolo_])
+            )
             ax.errorbar(
                 channels,
                 self.fitData[evalTime]["boloData"][bolo_],
@@ -1383,11 +1391,13 @@ class Emis3D:
                 color="purple",
                 label="total emission",
             )
+            if np.nanmax(tot_emission) > ymax:
+                ymax = np.nanmax(tot_emission)
 
             ax.set_xlabel("Channel Number")
             ax.set_ylabel(f"Emission {units_label}")
             ax.set_title(f"{bolo_}")
-            ax.set_ylim(0, ax.get_ylim()[1])
+            ax.set_ylim(0, ymax * 1.02)
 
             if ii == 0:
                 ax.legend(fontsize=8)

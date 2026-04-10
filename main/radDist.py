@@ -1165,7 +1165,7 @@ class ElongatedRing(RadDist):
                 eqFileName=self.info["eqFileName"],
             )
 
-            str_ = f"Building Elongated Ring radDist using a polSigma of {self.info['polSigma']:.2f}"
+            str_ = f"→ Building Elongated Ring radDist using a polSigma of {self.info['polSigma']:.2f}"
             str_ += f", elongation of {self.info['elongation']:.2f}, rotation angle of {self.info['rotationAngle']:.2f}, starting at R = {startR:.2f}m and z = {startZ:.2f}"
 
             print(str_)
