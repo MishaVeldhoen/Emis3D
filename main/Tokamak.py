@@ -805,7 +805,7 @@ class Tokamak(object):
 
             if self.info["mode"] != "Build":
                 print(
-                    f"Building the tokamak! We need this to trace the chords for the bolometers"
+                    f"→ Building the tokamak! We need this to trace the chords for the bolometers"
                 )
                 self._build_tokamak()
             try:

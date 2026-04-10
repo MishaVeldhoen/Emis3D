@@ -1,6 +1,7 @@
 # radDist_Fitting.py
 """
-Contains the class used by emis3D for a given radDist
+Helper class used to set up a loaded radDist for fitting, maps signals, loads radDist,
+creates the parameters, etc.
 
 NOTE: The minimum values for the fitting are hard coded in self.create_parameters
 This was done so the von mises distribution decays to zero for the helical distribution at +/- pi
@@ -8,12 +9,6 @@ which corresponds to +/- 720 degrees, since phi is scaled down during fitting.
 
 Written by JLH Aug. 2025
 
-BUG:
-1. Here                    # --- Find the toroidal location of the channel
-                    temp_scale.append(
-                        self.data_maps[emissionName]["scaleFactor"].get(chan, np.nan)
-                    )
-it adds too many values or something?
 """
 
 import numpy as np
@@ -28,7 +23,7 @@ class RadDistFitting:
     generating the initial parameters to be used while fitting and more.
     """
 
-    def __init__(self, radDistPath=None):
+    def __init__(self, radDistPath: str | None = None) -> None:
         self.info = {}
         self.info["radDistPath"] = radDistPath
 
@@ -81,7 +76,9 @@ class RadDistFitting:
                 self.data_maps[emissionName]["data_error"].update(map_data_error)
                 self.data_maps[emissionName]["scaleFactor"].update(map_scale)
 
-    def prepare_for_fits(self, channelOrder, data_max=None) -> None:
+    def prepare_for_fits(
+        self, channelOrder: list, data_max: float | None = None
+    ) -> None:
         """
         Prepares the data for fitting, will arrange the data
         in nested lists as well as create parameters used with LMFIT.
@@ -105,19 +102,27 @@ class RadDistFitting:
             for val in ["scaleFactor", "data", "data_error"]:
                 self.fitSynthetic[emissionName][val] = []
 
-            print("Channel order: \n:", channelOrder)
-            for ch_list in channelOrder:
+            for bolo_ in channelOrder:
                 temp_data = []
                 temp_data_error = []
                 temp_scale = []
-                for chan in ch_list:
-                    temp_data.append(self.data_maps[emissionName]["data"].get(chan, 0))
+                for chan in bolo_:
+
+                    # --- Make sure the channel is in the radDist
+                    if chan not in self.data_maps[emissionName]["data"]:
+                        if "ERROR CHANNELS" not in self.info:
+                            self.info["ERROR CHANNELS"] = ""
+                        self.info["ERROR CHANNELS"] += f"{chan}, "
+
+                    temp_data.append(
+                        self.data_maps[emissionName]["data"].get(chan, 0.0)
+                    )
                     temp_data_error.append(
-                        self.data_maps[emissionName]["data_error"].get(chan, 1.0)
+                        self.data_maps[emissionName]["data_error"].get(chan, 1.0e19)
                     )
                     # --- Find the toroidal location of the channel
                     temp_scale.append(
-                        self.data_maps[emissionName]["scaleFactor"].get(chan, np.nan)
+                        self.data_maps[emissionName]["scaleFactor"].get(chan, 0.0)
                     )
 
                 # --- Flatten the list
@@ -128,7 +133,7 @@ class RadDistFitting:
                 self.fitSynthetic[emissionName]["data_error"].append(temp_data_error)
                 self.fitSynthetic[emissionName]["scaleFactor"].append(temp_scale)
 
-        # --- Find the synthetic scaling factor
+        # --- Find the synthetic scaling factor, set to 1 if the user doesn't provide data_max
         scale = 1.0
         if data_max is not None:
             scale_ = []
@@ -160,7 +165,9 @@ class RadDistFitting:
                 temp_
             )
 
-    def create_parameters(self, boloNames=None, varyScaleFactor=False) -> None:
+    def create_parameters(
+        self, boloNames: list | None = None, varyScaleFactor: bool = False
+    ) -> None:
         """
         Creates the LMFIT parameters for the radDist
         """
@@ -187,15 +194,11 @@ class RadDistFitting:
 
             paramName = None
             min_ = 0.0
-            if "clockwise" in emissionName:
-                min_ = 0.4
-                paramName = f"b_clockwise_{self.info['injectionLocation']}"
-            elif "counterClock" in emissionName:
-                min_ = 0.4
-                paramName = f"b_counterClock_{self.info['injectionLocation']}"
-            else:
-                paramName = f"b_{emissionName}_{self.info['injectionLocation']}"
+            paramName = f"b_{emissionName}_{int(self.info['injectionLocation'])}"
+            if "clockwise" in emissionName or "counterClock" in emissionName:
+                min_ = 0.0
 
+            # --- Add it to the params pool
             if (
                 paramName is not None
                 and paramName not in self.fitSynthetic["params"]["paramName"]

@@ -21,7 +21,7 @@ def config_loader(pathFileName="", verbose=False):
         with open(pathFileName, "r") as f:
             config = yaml.safe_load(f)
         if verbose:
-            print(f"Loaded config file: {pathFileName}")
+            print(f"\n→ Loaded config file: {pathFileName}")
         return config
 
     except Exception as e:
@@ -50,16 +50,6 @@ def RPhi_To_XY(R, Phi):
     y = R * np.sin(Phi)
 
     return x, y
-
-
-"""
-def RedChi2_To_Pvalue(RedChi2, Dof):
-    return chi2.cdf(x=RedChi2 * Dof, df=Dof)
-
-
-def Pvalue_To_RedChi2(Pvalue, Dof):
-    return chi2.ppf(q=Pvalue, df=Dof) / Dof
-"""
 
 
 def rpz_XYZ(rpz):

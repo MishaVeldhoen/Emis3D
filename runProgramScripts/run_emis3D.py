@@ -89,7 +89,7 @@ if __name__ == "__main__":
                 )
         results = {}
         start_time = time.time()
-        print("Preforming fits")
+        print("→ Preforming fits")
 
         with ThreadPoolExecutor(
             max_workers=max_workers, initializer=init_worker, initargs=(data_dict,)
@@ -98,9 +98,9 @@ if __name__ == "__main__":
                 results[ii] = fit_result
                 if ii % 1_000 == 0 and t.verbose:
                     if t.info is not None and "numFits" in t.info:
-                        print(f"Done with fit {ii} out of {t.info['numFits']}")
+                        print(f"→ Done with fit {ii} out of {t.info['numFits']}")
 
-        print(f"Done with fits in {time.time() - start_time:.2f} seconds")
+        print(f"→ Done with fits in {time.time() - start_time:.2f} seconds")
 
         # Merge results back into boss data
         for ii, fit_result in results.items():

@@ -62,18 +62,14 @@ see _combine_synthetics_for_fits as a older starting point
 2. Give the user the option to use the new error technique or use the error from the data
 3. Double check field line tracer with output from MOFAT
 4. See if crossCalib: is needed in the _preform_fits definition
+5. Change how the error in the data is calculated, introduce a new defintion that gives the
+user more options, have them choose in the runconfig file
+
 
 Biggest Issues:
 1. Find good radDist functions that represent what is going on
     - Have the helical distribution change orientation (and shape?) as it goes around the vessel
     - Add a tomography radDist mapping function (like BOLT?)
-2. Implement a toroidal distribution function that is not symmetric around the injection loction
-3. Re-vist how error is calculated for the observed data
-
-
-BUG:
-1. Program crashes when using an averaging window of 0.0001 for JET data? Is this smaller than the time resolution
-or something?
 
 """
 
@@ -145,6 +141,7 @@ class Emis3D:
             print("tokamakName or runConfigName is None, cannot run the program")
             return
 
+        Util_emis3D.print_intro()
         self._load_config_file(tokamakName=tokamakName, runConfigName=runConfigName)
         self._load_bolometer_data()
         self._create_master_channel_order()
@@ -164,23 +161,8 @@ class Emis3D:
             self._prepare_fits(evalTime=evalTime, crossCalib=crossCalib)
             t_start = time.time()
 
-            """
-            NOTE: IS THIS NEEDED ANYMORE?
-            if crossCalib:
-                self._minimize_radDists(evalTime=evalTime)
-            else:
-                if (
-                    self.info is not None
-                    and self.info.get("numProcessorsFitting", 1) > 1
-                ):
-                    self._run_parallel(
-                        evalTime=evalTime, max_workers=self.info["numProcessorsFitting"]
-                    )
-                else:
-            """
-
             self._minimize_radDists(evalTime=evalTime)
-            print(f"Fitting done in {time.time() - t_start:.2f} seconds")
+            print(f"→ Fitting done in {time.time() - t_start:.2f} seconds")
             self._post_process_fit_arrangement(evalTime=evalTime)
             self._post_process_radiation_distribution(evalTime=evalTime)
             self._post_process_calculations(evalTime=evalTime)
@@ -250,7 +232,7 @@ class Emis3D:
             return
 
         if self.verbose:
-            print("Loading radDists")
+            print("→ Loading radDists")
 
         try:
             # --- Initilize synthetic signal arrays
@@ -314,7 +296,7 @@ class Emis3D:
                         print(f"Error loading radDist {file_}: {e}")
 
             if self.verbose:
-                print("Done loading radDists")
+                print("→ Done loading radDists")
 
         except Exception as e:
             print(f"An error occured while loading synthetic data: {e}")
@@ -348,7 +330,7 @@ class Emis3D:
                     raise FileNotFoundError(f"File does not exist: {pathFileName}")
 
                 if self.verbose:
-                    print(f"Loading bolometer data: {pathFileName}")
+                    print(f"→ Loading bolometer data: {pathFileName}")
 
                 temp_ = read_h5(pathFileName)
 
@@ -372,6 +354,9 @@ class Emis3D:
         """
         Build a master channel list from the loaded bolometer data.
         All radDists and raw data will be ordered to match this list.
+
+        List is of the format:
+        [[bolo1_1, bolo1_2, ...], [bolo2_1, bolo2_2, ...], ...]
         """
 
         # --- Only run if error free
@@ -461,13 +446,16 @@ class Emis3D:
             if not hasattr(self, "fitData"):
                 self.fitData = {}
 
-            # NOTE: observed is what is used in the minimization process.
-            #       bolo data is organzied to make plotting easier
+            # NOTE:
+            """
+            - Observed is what is used in the minimization process, it is a set of
+              nested list, the same way that self.channel_order['channel_list'] is organized
+            - Bolo data is organzied to make plotting easier since it is a dict of each bolometer.
+            """
 
             self.fitData[evalTime] = {
                 "observed": [],
                 "observed_error": [],
-                # --- Store the data for each bolometer,
                 "boloData": {},
                 "boloData_error": {},
             }
@@ -486,17 +474,15 @@ class Emis3D:
             max_ = max(
                 (
                     data_[ch]
-                    for channels in self.channel_order["channel_list"]
-                    for ch in channels
+                    for bolo_ in self.channel_order["channel_list"]
+                    for ch in bolo_
                 ),
                 default=0.0,
             )
 
-            for ii, channels in enumerate(self.channel_order["channel_list"]):
+            for ii, bolo_chans in enumerate(self.channel_order["channel_list"]):
                 temp = []
                 temp_e = []
-
-                bolo_ = self.channel_order["bolometer_order"][ii]
 
                 # --- Find the max value for that specific array
                 """
@@ -506,7 +492,7 @@ class Emis3D:
                         max_ = data_[channel]
                 """
 
-                for channel in channels:
+                for channel in bolo_chans:
                     val = data_[channel]
                     temp.append(val)
 
@@ -525,11 +511,12 @@ class Emis3D:
                 self.fitData[evalTime]["observed_error"].append(temp_e)
 
                 # --- Temp is a nested list of bolometers [[Bolo1-1, Bolo1-2, ...], [Bolo2-1, Bolo2-2], etc.]
-                self.fitData[evalTime]["boloData"][bolo_] = temp
-                self.fitData[evalTime]["boloData_error"][bolo_] = temp_e
+                bolo_name = self.channel_order["bolometer_order"][ii]
+                self.fitData[evalTime]["boloData"][bolo_name] = temp
+                self.fitData[evalTime]["boloData_error"][bolo_name] = temp_e
 
             if self.verbose:
-                print(f"Observed data prepared for fitting")
+                print("→ Observed data prepared for fitting")
 
         except Exception as e:
             print(f"An error occured while preparing data for the fit: {e}")
@@ -544,9 +531,23 @@ class Emis3D:
         if not self.error_free:
             return
 
+        print_minor_error = True
+
+        def print_error(radD):
+            print("")
+            print("-" * 10 + "MINOR ERROR" + "-" * 10)
+            print(
+                f"Channels: {radD.info['ERROR CHANNELS']} were not found in the radDist, they will be ignored"
+            )
+            print("-" * 31)
+            print("")
+
         try:
-            print("Preparing synthetic data for fitting")
+            print("→ Preparing synthetic data for fitting")
+
+            # --- Scale the synthetic data to observed for better fitting
             max_data_val = find_max_nested_lists(self.fitData[evalTime]["observed"])
+
             if self.info is not None and "varyScaleFactor" in self.info:
 
                 boloNames = (
@@ -566,6 +567,9 @@ class Emis3D:
                             boloNames=boloNames,
                             varyScaleFactor=self.info["varyScaleFactor"],
                         )
+                        if "ERROR CHANNELS" in radD.info and print_minor_error:
+                            print_error(radD)
+                            print_minor_error = False
 
                 # --- Arrange and create parameters for the location independent data
                 for number_ in self.data["synthetic"]["locIndependent"]:
@@ -578,8 +582,12 @@ class Emis3D:
                         varyScaleFactor=self.info["varyScaleFactor"],
                     )
 
+                    if "ERROR CHANNELS" in radD.info and print_minor_error:
+                        print_error(radD)
+                        print_minor_error = False
+
             if self.verbose:
-                print("Done preparing synthetic data for fit")
+                print("→ Done preparing synthetic data for fit")
 
         except Exception as e:
             print(f"An error occured while preparing synthetic data for fitting: {e}")
@@ -597,7 +605,12 @@ class Emis3D:
         else:
             source = self.data["synthetic"][locDependence][location][number]
 
+        in_ = {}
+        if radDist_.info is not None:
+            in_ = radDist_.info
+
         synthetic_dict = {
+            "info": in_,
             "paramName": radDist_.fitSynthetic["params"]["paramName"],
             "injectionLocation": source.info["injectionLocation"],
             "injectionLocation_rad": np.deg2rad(source.info["injectionLocation"]),
@@ -625,13 +638,13 @@ class Emis3D:
 
         try:
             if self.verbose:
-                print("Preparing data for fitting")
+                print("→ Preparing data for fitting")
 
             self._prepare_data_for_fit(evalTime=evalTime)
             self._prepare_synthetic_for_fits(evalTime=evalTime, crossCalib=crossCalib)
 
             if self.verbose:
-                print("Arranging radDists for fitting")
+                print("→ Arranging radDists for fitting")
 
             if not hasattr(self, "fits"):
                 self.fits = {}
@@ -715,7 +728,7 @@ class Emis3D:
                     continue
 
                 if ii % 1_000 == 0 and self.verbose:
-                    print(f"Preforming fit {ii} out of {self.info['numFits']}")
+                    print(f"→ Preforming fit {ii} out of {self.info['numFits']}")
 
                 synth_dict = self.fits[evalTime][ii]["synthetic_dict"]
                 pars = self.fits[evalTime][ii]["parameters"]
@@ -828,9 +841,9 @@ class Emis3D:
         bestFitID = np.array(self.fits[evalTime]["chiSqVec"]).argmin().item()
 
         # --- Print the results of the best fit
-        print("\n" * 2)
+        print("")
         report_fit(self.fits[evalTime][bestFitID]["fit"])
-        print("\n" * 2)
+        print("")
 
         # --- Store the best fit
         if not hasattr(self, "bestFits"):
@@ -912,7 +925,6 @@ class Emis3D:
             return
 
         scale_def = self.info["scale_def"]
-        radDist_ = self.bestFits[evalTime]["radDist"]
         params = self.bestFits[evalTime]["fit"].params.valuesdict()
 
         mu = self.bestFits[evalTime]["synthetic_dict"]["injectionLocation_rad"]
@@ -922,14 +934,7 @@ class Emis3D:
         self.bestFits[evalTime]["radiation_distribution"] = {}
         rad_distribution = self.bestFits[evalTime]["radiation_distribution"]
 
-        if radDist_.info is not None and "distType" in radDist_.info:
-            emissionNames = (
-                ["clockwise", "counterClock"]
-                if radDist_.info["distType"].lower() == "helical"
-                else radDist_.info["emissionNames"]
-            )
-        else:
-            emissionNames = self.bestFits[evalTime]["synthetic_dict"]["emissionNames"]
+        emissionNames = self.bestFits[evalTime]["synthetic_dict"]["emissionNames"]
 
         # --- Lists to fit the whole radiation distribution too
         # Shared output grid: clean [0, 2π] at 500 points.
@@ -937,8 +942,6 @@ class Emis3D:
         # further wrapping in _post_process_calculations.
         phi_grid = np.linspace(0, 2.0 * np.pi, 500)
         amp_total = np.zeros_like(phi_grid)
-        # x_all = []
-        # y_all = []
 
         for emissionName in emissionNames:
 
@@ -962,11 +965,17 @@ class Emis3D:
             )
 
             if "clockwise" in emissionName:
-                loc_ = dphi <= 0  # CW half:  [-π, 0]  → [-2π·N, 0], for helicals
+                # CW half:  [-π, 0]  → [-2π·N, 0], for helicals
+                loc_ = (dphi > -np.pi) & (
+                    dphi <= 0
+                )  # CW:  exclude the "arrival" endpoint
                 # Scale back up to 2 pi since the helical distribution is a full revolutions
                 dphi_scale = 2.0 * numTransits
             elif "counterClock" in emissionName:
-                loc_ = dphi > 0  # CCW half: (0,  π]  → (0, 2π·N], for helicals
+                # CCW half: (0,  π]  → (0, 2π·N], for helicals
+                loc_ = (dphi > 0) & (
+                    dphi < np.pi
+                )  # CCW: exclude the "arrival" endpoint
                 dphi_scale = 2.0 * numTransits
             else:
                 loc_ = np.full(dphi.shape[0], fill_value=True)
@@ -1076,6 +1085,7 @@ class Emis3D:
                 dphi = np.delete(dphi, indx)
                 ppb_amp = np.delete(ppb_amp, indx)
 
+                # BUG: Here? CW negative flipped to negative twice?
                 if "counterClock" in emissionName:
                     dphi[dphi <= 0] += 2.0 * np.pi
                 elif "clockwise" in emissionName:
@@ -1202,7 +1212,7 @@ class Emis3D:
         """Delete non-best-fit entries from self.fits to reclaim memory."""
 
         if self.verbose:
-            print(f"Deleting bad fits for = {evalTime:.4f} ms")
+            print(f"→ Deleting bad fits for = {evalTime:.4f} ms")
 
         # --- Delete the bad fits to save memory
         if hasattr(self, "fits") and evalTime in self.fits:
@@ -1244,7 +1254,7 @@ class Emis3D:
         save_results(
             pathFileName, {"fit_data": self.fitData, "bestFits": self.bestFits}
         )
-        print(f"Best fits and fitData saved to: {pathFileName}")
+        print(f"→ Best fits and fitData saved to: {pathFileName}")
 
     def _load_bestFits(self, path: str = "") -> None:
         """Load bestFits and fitData from a previously saved dill file."""
@@ -1271,7 +1281,7 @@ class Emis3D:
 
     def _plot_bestFit(self, evalTime: float, save: bool = False) -> None:
         """Plots the fit synthetic signal, data, and radDist for the given evalTime."""
-        print(f"Plotting the best fit")
+        print(f"→ Plotting the best fit")
 
         if self.info is None:
             return
@@ -1420,7 +1430,7 @@ class Emis3D:
                 os.makedirs(img_dir, exist_ok=True)
                 out_path = join(img_dir, filename)
                 plt.savefig(out_path, dpi=100, format="png")
-                print(f"Figure saved to {out_path}")
+                print(f"→ Figure saved to {out_path}")
 
         else:
             plt.show()

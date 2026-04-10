@@ -55,12 +55,16 @@ t = Emis3D(
     verbose=verbose,
     initialize=True,
 )
-t._load_bestFits(
-    path="/Users/plh/Documents/git/Emis3D/inputs/JET/runs/95709/95709_bestFits_50.953.dill"
-)
+
+
+t._perform_fits(evalTime=evalTime)
+
+# t._load_bestFits(
+#    path="/Users/plh/Documents/git/Emis3D/inputs/JET/runs/95709/95709_bestFits_50.953.dill"
+# )
 # t._perform_fits(evalTime=evalTime, crossCalib=False)
 # t._plot_bestFit(evalTime=evalTime, save=False)
-t._plot_bestFit(evalTime=50.953)
+# t._plot_bestFit(evalTime=50.953)
 
 """
 t._load_config_file(

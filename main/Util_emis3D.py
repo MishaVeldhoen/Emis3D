@@ -185,28 +185,25 @@ def residual(
     data = {}  # per-emission scaled synthetic (returned when residual=False)
 
     for emissionName in synthetic_dict["emissionNames"]:
-        # --- Find the number of revolutions the helical distribution makes,
-        # it will return 0 for non-helical distributions
+
+        # --- Find the number of revolutions the helical distribution makes
+        numRevolutions = 1.0
+
         if "clockwise" in emissionName or "counterClock" in emissionName:
-            numRevolutions = len(synthetic_dict["emissionNames"]) / 2.0
-        else:
-            numRevolutions = 0.0
+            if "info" in synthetic_dict:
+                if "numTransists" in synthetic_dict["info"]:
+                    numRevolutions = synthetic_dict["info"]["numTransists"]
 
         data[emissionName] = {}
         # --- Get the new scale factor for the normal runs
         if boloNames is None:
-            # --- Hard-coded parameter names... not ideal
             a = params[f"a_{synthetic_dict['injectionLocation']}"]
-            if "clockwise" in emissionName:
-                b = params[f"b_clockwise_{synthetic_dict['injectionLocation']}"]
-            elif "counterClock" in emissionName:
-                b = params[f"b_counterClock_{synthetic_dict['injectionLocation']}"]
-            else:
-                b = params[f"b_{emissionName}_{synthetic_dict['injectionLocation']}"]
+            b = params[f"b_{emissionName}_{int(synthetic_dict['injectionLocation'])}"]
 
         # --- Loop over each bolometer group
         for ii in range(len(synthetic_dict[emissionName]["data"])):
 
+            # --- Different parameter names when doing the cross-calibration
             if boloNames is not None:
                 a = params[f"{boloNames[ii]}"]
                 b = 0.0
@@ -321,3 +318,18 @@ def error_inv_sqrt(
     """
     signal = np.clip(signal, _floor, None)
     return scale_factor * np.sqrt(max_signal / signal)
+
+
+def print_intro() -> None:
+
+    print(
+        """
+
+    ███████╗███╗   ███╗██╗███████╗██████╗ ██████╗ 
+    ██╔════╝████╗ ████║██║██╔════╝╚════██╗██╔══██╗
+    █████╗  ██╔████╔██║██║███████╗ █████╔╝██║  ██║
+    ██╔══╝  ██║╚██╔╝██║██║╚════██║ ╚═══██╗██║  ██║
+    ███████╗██║ ╚═╝ ██║██║███████║██████╔╝██████╔╝
+    ╚══════╝╚═╝     ╚═╝╚═╝╚══════╝╚═════╝ ╚═════╝
+    """
+    )

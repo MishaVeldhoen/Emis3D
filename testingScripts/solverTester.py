@@ -118,42 +118,44 @@ tok = Tokamak(
 
 rzArray = Util_radDist.callRZGridTokamak(
     tok,
-    numRgrid=config["GRID"]["NumRStartGrid"],
-    numZgrid=config["GRID"]["NumZStartGrid"],
+    num_r=config["GRID"]["NumRStartGrid"],
+    num_z=config["GRID"]["NumZStartGrid"],
 )
 
 # --- Update the configuration file
-rzArray[0] = [rzvalues[0], rzvalues[1]]
-config["polSigma"] = polSigma
-config["elongation"] = elongation
-config["rotationAngle"] = rotationAngle
-config["saveRunsDirectoryName"] = "solverTesting"
-arg_list = [(val, config) for val in rzArray]
-arg_list = arg_list[0]
+rD = None
+if rzArray is not None:
+    rzArray[0] = [rzvalues[0], rzvalues[1]]
+    config["polSigma"] = polSigma
+    config["elongation"] = elongation
+    config["rotationAngle"] = rotationAngle
+    config["saveRunsDirectoryName"] = "solverTesting"
+    arg_list = [(val, config) for val in rzArray]
+    arg_list = arg_list[0]
 
-# --- Decrease the number of sampling points used, to speed up the process
-arg_list[1]["BOLOMETER_PROPS"] = {"pixelSamples": 100, "numProcessors": 1}
+    # --- Decrease the number of sampling points used, to speed up the process
+    arg_list[1]["BOLOMETER_PROPS"] = {"pixelSamples": 100, "numProcessors": 1}
 
-# --- Delete old radDist directory if it exists
-radDist_dir = os.path.join(
-    EMIS3D_INPUTS_DIRECTORY, tokamakName, "radDists", "solverTesting"
-)
-if os.path.exists(radDist_dir):
-    import shutil
-
-    shutil.rmtree(radDist_dir)
-
-# --- Create the radDist
-if config["distType"] == "Helical":
-    rD = Util_radDist.radDist_Helical_parallel(arg_list, return_result=True)
-elif config["distType"] == "ElongatedRing":
-    rD = Util_radDist.radDist_ElongatedRing_parallel(arg_list, return_result=True)
-elif config["distType"] == "SquareTube":
-    rD = Util_radDist.radDist_SquareTube_parallel(arg_list, return_result=True)
-else:
-    raise RuntimeError(
-        "Please have 'elongatedRing', 'helical', or 'SqureTube' in the configFileName"
+    # --- Delete old radDist directory if it exists
+    radDist_dir = os.path.join(
+        EMIS3D_INPUTS_DIRECTORY, tokamakName, "radDists", "solverTesting"
     )
+    if os.path.exists(radDist_dir):
+        import shutil
+
+        shutil.rmtree(radDist_dir)
+
+    # --- Create the radDist
+    if config["distType"] == "Helical":
+        rD = Util_radDist.radDist_Helical_parallel(arg_list, return_result=True)
+    elif config["distType"] == "ElongatedRing":
+        rD = Util_radDist.radDist_ElongatedRing_parallel(arg_list, return_result=True)
+    elif config["distType"] == "SquareTube":
+        rD = Util_radDist.radDist_SquareTube_parallel(arg_list, return_result=True)
+    else:
+        raise RuntimeError(
+            "Please have 'elongatedRing', 'helical', or 'SqureTube' in the configFileName"
+        )
 
 
 # ------------------------------------------------------------------------------

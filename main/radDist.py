@@ -792,7 +792,7 @@ class Helical(RadDist):
         if setFieldLine:
 
             print(
-                f"Building Helical radDist | "
+                f"→ Building Helical radDist | "
                 f"polSigma={self.info['polSigma']:.2f}, "
                 f"R={startR:.2f} m, z={startZ:.2f} m"
             )
@@ -966,7 +966,7 @@ class HelicalRing(RadDist):
 
         # --- Create the field line to trace
         if setFieldLine:
-            str_ = f"Building HelicalRing radDist using a polSigma of {self.info['polSigma']:.2f} elongation of {self.info['elongation']:.2f},"
+            str_ = f"→ Building HelicalRing radDist using a polSigma of {self.info['polSigma']:.2f} elongation of {self.info['elongation']:.2f},"
             str_ += f" starting at R = {startR:.2f}m and z = {startZ:.2f}m"
             print(str_)
             self._build_tokamak(
@@ -1284,7 +1284,7 @@ class SquareTube(RadDist):
             eqFileName=self.info["eqFileName"],
         )
 
-        str_ = f"Building Square Tube radDist using starting at R = {startR:.2f} +/- {dR:.2f}m and z = {startZ:.2f} +/- {dz:.2f}m"
+        str_ = f"→ Building Square Tube radDist using starting at R = {startR:.2f} +/- {dR:.2f}m and z = {startZ:.2f} +/- {dz:.2f}m"
         print(str_)
 
     def _evaluate(
