@@ -7,6 +7,13 @@ This was done so the von mises distribution decays to zero for the helical distr
 which corresponds to +/- 720 degrees, since phi is scaled down during fitting.
 
 Written by JLH Aug. 2025
+
+BUG:
+1. Here                    # --- Find the toroidal location of the channel
+                    temp_scale.append(
+                        self.data_maps[emissionName]["scaleFactor"].get(chan, np.nan)
+                    )
+it adds too many values or something?
 """
 
 import numpy as np
@@ -98,6 +105,7 @@ class RadDistFitting:
             for val in ["scaleFactor", "data", "data_error"]:
                 self.fitSynthetic[emissionName][val] = []
 
+            print("Channel order: \n:", channelOrder)
             for ch_list in channelOrder:
                 temp_data = []
                 temp_data_error = []
@@ -107,8 +115,9 @@ class RadDistFitting:
                     temp_data_error.append(
                         self.data_maps[emissionName]["data_error"].get(chan, 1.0)
                     )
+                    # --- Find the toroidal location of the channel
                     temp_scale.append(
-                        self.data_maps[emissionName]["scaleFactor"].get(chan, 1.0)
+                        self.data_maps[emissionName]["scaleFactor"].get(chan, np.nan)
                     )
 
                 # --- Flatten the list
@@ -120,18 +129,19 @@ class RadDistFitting:
                 self.fitSynthetic[emissionName]["scaleFactor"].append(temp_scale)
 
         # --- Find the synthetic scaling factor
+        scale = 1.0
         if data_max is not None:
             scale_ = []
             for emissionName in self.info["emissionNames"]:
                 synth_max = find_max_nested_lists(
                     self.fitSynthetic[emissionName]["data"]
                 )
-                scale_.append(data_max / synth_max)
+                if synth_max is not None and synth_max > 0:
+                    scale_.append(data_max / synth_max)
 
             # --- Use the max value
-            scale = np.nanmax(scale_)
-        else:
-            scale = 1.0
+            if len(scale_) > 0:
+                scale = np.nanmax(scale_)
 
         # --- Scale the synthetic data
         for emissionName in self.info["emissionNames"]:
@@ -176,24 +186,23 @@ class RadDistFitting:
         for emissionName in self.info["emissionNames"]:
 
             paramName = None
-            min = 0.0
+            min_ = 0.0
             if "clockwise" in emissionName:
-                min = 0.4
+                min_ = 0.4
                 paramName = f"b_clockwise_{self.info['injectionLocation']}"
-                if paramName not in self.fitSynthetic["params"]["paramName"]:
-                    self.fitSynthetic["params"]["paramName"].append(paramName)
             elif "counterClock" in emissionName:
-                min = 0.4
+                min_ = 0.4
                 paramName = f"b_counterClock_{self.info['injectionLocation']}"
-                if paramName not in self.fitSynthetic["params"]["paramName"]:
-                    self.fitSynthetic["params"]["paramName"].append(paramName)
             else:
                 paramName = f"b_{emissionName}_{self.info['injectionLocation']}"
 
-            if paramName is not None:
+            if (
+                paramName is not None
+                and paramName not in self.fitSynthetic["params"]["paramName"]
+            ):
                 self.fitSynthetic["params"]["paramName"].append(paramName)
                 params.add(
-                    paramName, value=2.0, vary=varyScaleFactor, min=min, max=15.0
+                    paramName, value=2.0, vary=varyScaleFactor, min=min_, max=15.0
                 )
 
         self.fitSynthetic["params"]["params"] = params

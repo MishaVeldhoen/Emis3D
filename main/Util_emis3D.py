@@ -78,10 +78,6 @@ def scale_wrapper(
             phi, mu, emissionName=str(emissionName), numRevolutions=numRevolutions
         )
 
-    # --- Set small values of a to zero
-    if a < 0.01:
-        a = 0
-
     if scale_def == "exponential":
         return scale_exp(a, b, dphi)
     elif scale_def == "linear":
