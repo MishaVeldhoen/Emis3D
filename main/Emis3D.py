@@ -541,7 +541,7 @@ class Emis3D:
             print("")
             print("-" * 10 + "MINOR ERROR" + "-" * 10)
             print(
-                f"Channels: {radD.info['ERROR CHANNELS']} were not found in the radDist, they will be ignored"
+                f"Channels: {radD.info['ERROR CHANNELS']}were not found in the radDist, they will be ignored"
             )
             print("-" * 31)
             print("")
