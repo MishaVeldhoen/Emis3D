@@ -1110,3 +1110,122 @@ class Tokamak(object):
 
         # --- Unbuild the tokamak
         self._change_object_parent(parent=self.world)
+
+    def synth_camera_test(self, CameraType = 0, TorAngleDeg=0.0,\
+                        Title = "render",\
+                        SpecBins=25, PixelSamples=250,\
+                        WithWallCAD=True):
+        print("This function is only set up for DIII-D so far, it's loading the DIII-D CAD")
+
+        #OutputFile = os.path.join("outputs", (str(Title) + ".png"))
+        OutputFile = str(Title) + ".png"
+
+        from raysect.core.math import translate, rotate_x, rotate_z
+        from raysect.optical.observer import PinholeCamera, RGBPipeline2D, RGBAdaptiveSampler2D
+        from raysect.optical import rotate, d65_white
+        from raysect.optical.library import Aluminium
+        from raysect.optical.material import UniformSurfaceEmitter, Roughen
+        from raysect.optical.library.spectra.colours import red, green, blue, purple
+        from raysect.primitive import Sphere
+
+        major_radius = 1.67
+        minor_radius = 0.67
+
+        if WithWallCAD:
+            # load CAD from inputs directory
+            pfcs = import_stl(os.path.join(self.input_dir, "CAD_stl_files","d3d_CAD_full.stl"))
+            pfcs.material = RoughTungsten(0.6)
+            pfcs.name = "PFCs"
+            pfcs.parent = self.world
+        else:
+            # Add general bounding cylinder if not CAD
+            bounding_height = minor_radius * 2.0 * 2.1
+            bounding_cyl = Cylinder((major_radius + minor_radius) * 1.1, bounding_height,\
+                                    transform=translate(0, 0, -0.5*bounding_height))
+            bounding_cyl.material = RoughTungsten(0.6)
+            bounding_cyl.parent = self.world
+        
+        # add general toroidal light source
+        height= 0.1
+        vertDisp = 0.6
+        outer_cyl = Cylinder(major_radius*1.02, height, transform=translate(0, 0, (-0.5*height) - vertDisp))
+        inner_cyl = Cylinder(major_radius*0.98, height*1.2, transform=translate(0, 0, (-0.6*height)-vertDisp))
+        illumination = Subtract(outer_cyl, inner_cyl)
+        illumination.material = UniformSurfaceEmitter(d65_white, 1.0)
+        illumination.parent = self.world
+        
+        outer_cyl = Cylinder(major_radius*1.02, height, transform=translate(0, 0, (-0.5*height) + vertDisp))
+        inner_cyl = Cylinder(major_radius*0.98, height*1.2, transform=translate(0, 0, (-0.6*height)+vertDisp))
+        illumination2 = Subtract(outer_cyl, inner_cyl)
+        illumination2.material = UniformSurfaceEmitter(d65_white, 1.0)
+        illumination2.parent = self.world
+        
+        rgb = RGBPipeline2D(name="sRGB", display_progress=False)
+        sampler = RGBAdaptiveSampler2D(rgb, ratio=100, fraction=0.2, min_samples=500, cutoff=0.05)
+        fov=140
+
+        # Add indicator lights and set casing material
+        for bolo in self.bolometers:
+            bolo.bolometer_camera.camera_geometry.material = Roughen(Aluminium(), 0.2)
+            foils = bolo.bolometer_camera.foil_detectors
+            for foil in foils:
+                center_point = foil.centre_point
+                #print(center_point)
+                CenterPoint = Sphere(0.001, parent=self.world,\
+                    transform=translate(center_point.x, center_point.y, center_point.z))
+                CenterPoint.material = UniformSurfaceEmitter(red, 100.0)
+        
+        if CameraType == 0:
+            # Camera that looks in the counterclockwise toroidal direction from Y=0, X=1.85
+            # This looks at disruption bolo location (When displaced to center of plasma chamber)
+            transform=rotate(0.0, 0.0, TorAngleDeg-2.0)\
+                           *translate(0.0, major_radius, 0.0)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
+        elif CameraType == 3:
+            # Camera for viewing outboard side
+            transform=rotate(0.0, 0.0, TorAngleDeg-180.0)\
+                           *translate(-0.8*major_radius, 0.0, 0.0)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
+        elif CameraType == 4:
+            # Camera for viewing outboard side
+            transform=rotate(0.0, 0.0, TorAngleDeg-180.0)\
+                           *translate(-0.9*major_radius, 0.0, 0.0)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
+        elif CameraType == 5:
+            # Camera for viewing outboard side above midplane
+            transform=rotate(0.0, 0.0, TorAngleDeg-180.0)\
+                           *translate(-0.9*major_radius, 0.0, 0.4)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
+        elif CameraType == 6:
+            # Camera for viewing outboard side above midplane
+            transform=rotate(0.0, 0.0, TorAngleDeg-180.0)\
+                           *translate(-1.1*major_radius, 0.0, 0.4)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
+        elif CameraType == 7:
+            # Camera for viewing outboard side above midplane, in upper midplane port
+            transform=rotate(0.0, 0.0, TorAngleDeg-180.0)\
+                           *translate(-1.2*major_radius, 0.0, 0.5)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
+        elif CameraType == 8:
+            # Camera for viewing outboard side above midplane, in upper midplane port
+            transform=rotate(0.0, 0.0, TorAngleDeg-180.0)\
+                           *translate(-1.35*major_radius, 0.0, 0.75)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
+        else:
+            raise Exception("Camera type does not match an option")
+                           
+        camera = PinholeCamera((350, 250), fov=fov, parent=self.world,\
+                       transform=transform,\
+                       pipelines=[rgb], frame_sampler=sampler)
+        
+        
+        camera.spectral_bins = SpecBins
+        camera.pixel_samples = PixelSamples
+
+        plt.ion()
+        p = 1
+        while not camera.render_complete:
+            print("Rendering pass {}...".format(p))
+            camera.observe()
+            print()
+            p += 1
+            stopRender = input("Stop? (y to stop)")
+            if stopRender == "y":
+                break
+        
+        plt.ioff()
+        #rgb.display()
+        rgb.save(OutputFile)
