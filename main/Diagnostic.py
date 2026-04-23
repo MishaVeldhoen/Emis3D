@@ -184,7 +184,6 @@ class Bolometer(object):
 
         outer_lower = Point3D(-housing_width / 2, -housing_height / 2, -housing_depth)
         outer_upper = Point3D(housing_width / 2, housing_height / 2, 0)
-
         camera_box_outer = Box(
             lower=outer_lower,
             upper=outer_upper,
@@ -274,7 +273,10 @@ class Bolometer(object):
         # --- Tilt the camera downward if it is downward facing
         sign = -1 if self.info["CAMERA_DOWNWARD_FACING"] else 1
         tilt_rad = sign * np.deg2rad(self.info["CAMERA_ROTATION"])
-        skew_rad = np.deg2rad(self.info["SKEW_ANGLE"])
+        try:
+            skew_rad = np.deg2rad(self.info["SKEW_ANGLE"])
+        except:
+            skew_rad = 0.0
 
         e_R = Vector3D(np.cos(CAMERA_PHI_RAD), np.sin(CAMERA_PHI_RAD), 0).normalise()
         e_z = ZAXIS
