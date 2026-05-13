@@ -184,7 +184,6 @@ class Bolometer(object):
 
         outer_lower = Point3D(-housing_width / 2, -housing_height / 2, -housing_depth)
         outer_upper = Point3D(housing_width / 2, housing_height / 2, 0)
-
         camera_box_outer = Box(
             lower=outer_lower,
             upper=outer_upper,
@@ -279,8 +278,15 @@ class Bolometer(object):
         e_z = ZAXIS
         e_phi = e_z.cross(e_R).normalise()
 
-        # Rotate e_z in R–z plane
-        view_dir = rotate_vector(e_z, e_phi, tilt_rad).normalise()
+        # Rotate the bolometer if the chords extend toroidally instead of the typical poloidal fan array
+        skew_rad = 0.0
+        if "SKEW_ANGLE" in self.info:
+            skew_rad = np.deg2rad(self.info["SKEW_ANGLE"])
+            
+        e_phi_skewed = rotate_vector(e_phi, e_z, skew_rad).normalise()
+
+        # Rotate e_z in R–z plane for poloidal tilt
+        view_dir = rotate_vector(e_z, e_phi_skewed, tilt_rad).normalise()
 
         # Build orthonormal basis
         z_axis = view_dir  # Camera z-axis: the direction the camera "looks"
