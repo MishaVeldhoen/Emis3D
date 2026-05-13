@@ -273,16 +273,16 @@ class Bolometer(object):
         # --- Tilt the camera downward if it is downward facing
         sign = -1 if self.info["CAMERA_DOWNWARD_FACING"] else 1
         tilt_rad = sign * np.deg2rad(self.info["CAMERA_ROTATION"])
-        try:
-            skew_rad = np.deg2rad(self.info["SKEW_ANGLE"])
-        except:
-            skew_rad = 0.0
 
         e_R = Vector3D(np.cos(CAMERA_PHI_RAD), np.sin(CAMERA_PHI_RAD), 0).normalise()
         e_z = ZAXIS
         e_phi = e_z.cross(e_R).normalise()
 
-        # Rotate e_r and e_phi about e_z for toroidal skew
+        # Rotate the bolometer if the chords extend toroidally instead of the typical poloidal fan array
+        skew_rad = 0.0
+        if "SKEW_ANGLE" in self.info:
+            skew_rad = np.deg2rad(self.info["SKEW_ANGLE"])
+            
         e_phi_skewed = rotate_vector(e_phi, e_z, skew_rad).normalise()
 
         # Rotate e_z in R–z plane for poloidal tilt
