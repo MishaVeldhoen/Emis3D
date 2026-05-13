@@ -6,6 +6,38 @@ routine. Each program requires config files to be run and some specific file org
 but the general structure is this:
 
 
+## Installation
+
+Requires Python 3.11 or 3.12.
+
+```bash
+git clone https://github.com/ORNL-Fusion/Emis3D
+cd Emis3D
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+Or, with [`uv`](https://docs.astral.sh/uv/):
+
+```bash
+uv venv --python 3.12
+uv pip install -e .
+```
+
+### Python Compatibility
+
+`cherab` and `raysect` ship Cython-compiled C extensions that don't build
+on CPython 3.13+ — the `_PyLong_AsByteArray` API changed in that release.
+Lift the cap once `cherab` ships a build compatible with newer Python.
+
+### Troubleshooting
+
+If `pip install -e .` fails with a `clang` / `_PyLong_AsByteArray` error,
+the Python version is too new. Check with `python --version` and recreate
+the venv with 3.12.
+
+
 INPUTS within /inputs/{tokamakName}/
 ------------------------------------------------------------------------------------------------
 eqdsks/                           :: The equilbrium files for your runs
