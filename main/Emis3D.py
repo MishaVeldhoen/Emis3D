@@ -61,14 +61,10 @@ TODO:
 see _combine_synthetics_for_fits as a older starting point
 2. Give the user the option to use the new error technique or use the error from the data
 3. Double check field line tracer with output from MOFAT
-4. See if crossCalib: is needed in the _preform_fits definition
-5. Change how the error in the data is calculated, introduce a new defintion that gives the
-user more options, have them choose in the runconfig file
 
 
 Biggest Issues:
 1. Find good radDist functions that represent what is going on
-    - Have the helical distribution change orientation (and shape?) as it goes around the vessel
     - Add a tomography radDist mapping function (like BOLT?)
 
 

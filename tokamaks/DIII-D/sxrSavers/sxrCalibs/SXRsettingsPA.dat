@@ -33,7 +33,7 @@ Filter 3 - Low Te SXR (1 mm x 3 mm slit in 1.3 mm thick tantalum with 12 um Be f
 Filter 4 - visible light (1 mm x 3 mm slit in 25 um thick moly foil with 1 mm fused silica filter, 36 degrees)
 Filter 5 - Hi Te SXR (1 mm x 3 mm slit in 25 um thick moly foil with 125 um Be filter, 0 degrees) - default setting
 
-****** Settings for 2014 - 2024 ******
+****** Settings for 2014 - 2025 ******
 Filter 0 - closed (162 degrees)
 Filter 1 - disruption prad (200 um pinhole in 50 um thick SS foil with no filter, 144 degrees)
 Filter 2 - ELM prad (300 um x 2 mm slit in 25 um thick moly foil with no filter, 108 degrees)
@@ -486,3 +486,33 @@ shot		Rc(RM)	Rc(RP) Gain(RM) Gain(RP) Filt(RM)Filt(RP)
 201257		1e5	1e5	1	1	5	5
 201355		1e5	1e5	1	1	0	0	! close for bake
 201419		1e5	1e5	1	1	5	5
+202244		1e5	1e5	1	1	0	0	! close for vent
+203278		1e5	1e5	1	1	5	5
+203557		1e5	1e5	1	1	0	0	! close for bake
+203757		500	500	1	1	4	4
+203787		1e5	1e5	1	1	3	3
+203864		1e5	1e5	1	1	5	5
+203929		1e5	1e5	1	1	3	3
+204045		500	500	1	1	4	4
+204065		1e5	1e5	1	1	5	5
+204375		1e5	1e5	1	1	3	3
+204411		1e5	1e5	1	1	5	5
+204606		500	500	1	1	4	4
+204615		1e5	1e5	1	1	5	5
+204775		1e5	1e5	1	1	0	0	! close for bake
+204806		1e5	1e5	1	1	5	5
+205260		1e5	1e5	1	1	0	0	! close for bake
+205606		1e5	1e5	1	1	5	5
+205659		1e5	1e5	1	1	0	0	! close for bake
+206107		1e5	1e5	1	1	5	5
+206139		1e5	1e5	1	1	0	0	! close for bake
+206369		1e5	1e5	1	1	5	5
+206441		1e5	1e5	1	1	0	0	! close for bake
+206451		1e5	1e5	1	1	5	5
+206713		1e5	1e5	1	1	3	3	
+206744		1e5	1e5	1	1	0	0	! close for bake
+206823		1e5	1e5	1	1	5	5
+206842		500	500	1	1	4	4
+206852		1e5	1e5	1	1	5	5
+206982		500	500	1	1	4	4
+206998		1e5	1e5	1	1	5	5

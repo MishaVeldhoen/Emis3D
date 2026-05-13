@@ -153,4 +153,24 @@ shot	Rc	Gain	Filt
 200803	1k	1	5
 200828	100k	1	2
 201355	100k	1	1	! dummy for bake
-201419	100k	1	1	
+201419	100k	1	2
+202244	100k	1	1	! dummy for vent
+203757	1k	1	5
+203787	100k	1	2
+204045	1k	1	4
+204065	100k	1	1
+204606	1k	1	4
+204615	100k	1	2
+204775	100k	1	1	! dummy for bake
+205260	100k	1	1	! dummy for bake
+205606	100k	1	2
+205659	100k	1	1	! dummy for bake
+206107	100K	1	2	
+206139	100k	1	1	! dummy for bake
+206369	100k	1	2	
+206744	100k	1	1	! dummy for bake
+206823	100k	1	2
+206842	1k	1	4	
+206852	1k	1	1	! dummy because dtaq not working
+206982	1k	1	4
+206998	1k	1	1
