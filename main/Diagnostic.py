@@ -144,8 +144,8 @@ class Bolometer(object):
         ORIGIN = Point3D(0, 0, 0)
 
         # --- Constants from the configuration file
-        SLIT_WIDTH = self.info["SLIT_WIDTH"]
-        SLIT_HEIGHT = self.info["SLIT_HEIGHT"]
+        SLIT_WIDTH = self.info["SLIT_HEIGHT"] # self.info["SLIT_WIDTH"]
+        SLIT_HEIGHT = self.info["SLIT_WIDTH"] # self.info["SLIT_HEIGHT"]
         SLIT_THICKNESS = 50.0e-6
         FOIL_WIDTH = self.info["FOIL_WIDTH"]
         FOIL_HEIGHT = self.info["FOIL_HEIGHT"]
@@ -161,7 +161,10 @@ class Bolometer(object):
 
         # --- Derived dimensions
         half_array_width = (
-            np.max(np.abs(FOIL_POSITIONS)) * FOIL_SEPARATION + FOIL_WIDTH / 2
+            np.max(
+            [np.max(np.abs(FOIL_POSITIONS)) * FOIL_SEPARATION + FOIL_WIDTH / 2,
+            SLIT_WIDTH/2]
+            )
         )
         clear_width = 2 * half_array_width
         clear_height = 2 * max(SLIT_HEIGHT, FOIL_HEIGHT)
@@ -221,7 +224,7 @@ class Bolometer(object):
             name="Housing with Aperture",
         )
 
-        camera_housing.material = NullMaterial()  # AbsorbingSurface() or NullMaterial()
+        camera_housing.material = AbsorbingSurface()  # AbsorbingSurface() or NullMaterial()
 
         # Attach the finished housing to the camera
         bolometer_camera.camera_geometry = camera_housing
@@ -341,6 +344,11 @@ class Bolometer(object):
                 else [0.0] * len(self.etendues)
             )
             return
+        
+        if "FOIL_SLIT_ANGLE_FACTOR" in self.info:
+            FOIL_SLIT_ANGLE_FACTOR = self.info["FOIL_SLIT_ANGLE_FACTOR"]
+        else:
+            FOIL_SLIT_ANGLE_FACTOR = 1.0
 
         self.etendues = []
         self.etendues_error = []
@@ -364,6 +372,8 @@ class Bolometer(object):
                 )
             )
             """
+            raytraced_etendue = raytraced_etendue * FOIL_SLIT_ANGLE_FACTOR
+            analytic_etendue = analytic_etendue * FOIL_SLIT_ANGLE_FACTOR
             self.etendues.append(raytraced_etendue.item())
             self.etendues_error.append(raytraced_error.item())
             analytic_etendues.append(analytic_etendue)

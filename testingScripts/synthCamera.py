@@ -27,8 +27,13 @@ tok = Tokamak(
 
 #breakpoint()
 
-tok.synth_camera_test(CameraType=8, TorAngleDeg=135, Title="gettingthere10",\
-                      WithWallCAD=True, SpecBins=10, PixelSamples=250)
+# tok.synth_camera_test(CameraType=0, TorAngleDeg=135, Title="gettingthere10",\
+#                     WithWallCAD=True, SpecBins=10, PixelSamples=250,\
+#                     ZoomMult=1.0)
+
+tok.synth_camera_test(CameraType=1, TorAngleDeg=135, Title="gettingthere10",\
+                    WithWallCAD=True, SpecBins=10, PixelSamples=250,\
+                    ZoomMult=1.35, Zadjust=0.75)
 
 # tok.synth_camera_test(CameraType=0, TorAngleDeg=-135, Title="toroidal-135",\
 #                       SpecBins=10, PixelSamples=250)
