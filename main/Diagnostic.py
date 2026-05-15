@@ -144,8 +144,8 @@ class Bolometer(object):
         ORIGIN = Point3D(0, 0, 0)
 
         # --- Constants from the configuration file
-        SLIT_WIDTH = self.info["SLIT_HEIGHT"] # self.info["SLIT_WIDTH"]
-        SLIT_HEIGHT = self.info["SLIT_WIDTH"] # self.info["SLIT_HEIGHT"]
+        SLIT_WIDTH = self.info["SLIT_WIDTH"]
+        SLIT_HEIGHT = self.info["SLIT_HEIGHT"]
         SLIT_THICKNESS = 50.0e-6
         FOIL_WIDTH = self.info["FOIL_WIDTH"]
         FOIL_HEIGHT = self.info["FOIL_HEIGHT"]
