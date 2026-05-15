@@ -639,9 +639,14 @@ class Tokamak(object):
             print(f"{boloGroupName} is not found in self.info['Bolometer Groups']")
             return
 
+        # --- Remove each bolometer from the world
+        for bolo in self.bolometers:
+            bolo._change_parent(value=None)
+
         # --- Loop over each bolometer, only plot those with the correct group name
         label_cherab = True
         for bolo in self.bolometers:
+            bolo._change_parent(value=self.world)
             if bolo.info["GROUP_NAME"] == boloGroupName:
 
                 # --- Over plot the chords in the cofig file
@@ -743,6 +748,11 @@ class Tokamak(object):
                             scale=1,
                             color="red",
                         )
+            bolo._change_parent(value=None)
+        
+        # --- Add back each bolometer from the world
+        for bolo in self.bolometers:
+            bolo._change_parent(value=self.world)
 
         if legend:
             ax.legend(loc="upper right")
@@ -809,7 +819,12 @@ class Tokamak(object):
                 )
                 self._build_tokamak()
             try:
+                # --- Remove each bolometer from the world
                 for bolo in self.bolometers:
+                    bolo._change_parent(value=None)
+
+                for bolo in self.bolometers:
+                    bolo._change_parent(value=self.world)
                     for foil in bolo.bolometer_camera:
                         slit_centre = foil.slit.centre_point
                         ax.plot(slit_centre[0], slit_centre[1], slit_centre[2], "ko")
@@ -827,6 +842,11 @@ class Tokamak(object):
                             "k",
                         )
                         ax.text(hit[0], hit[1], hit[2], foil.name)
+                    bolo._change_parent(value=None)
+
+                # --- Add back each bolometer to the world
+                for bolo in self.bolometers:
+                    bolo._change_parent(value=self.world)
             except Exception as e:
                 print(f"Could not plot the bolometer chords, error: {e}")
                 print(
@@ -1104,7 +1124,7 @@ class Tokamak(object):
             bolo._calc_etendues()
             bolo._change_parent(value=None)
 
-        # --- Add each bolometer from the world
+        # --- Add each bolometer back to the world
         for bolo in self.bolometers:
             bolo._change_parent(value=self.world)
 
@@ -1114,8 +1134,9 @@ class Tokamak(object):
     def synth_camera_test(self, CameraType = 0, TorAngleDeg=0.0,\
                         Title = "render",\
                         SpecBins=25, PixelSamples=250,\
-                        WithWallCAD=True):
-        print("This function is only set up for DIII-D so far, it's loading the DIII-D CAD")
+                        WithWallCAD=True, IndLightSize = 0.001, BoundingCylMult=1.0,\
+                        ZoomMult=1.0, Zadjust=0.0, Radjust=0.0,\
+                        major_radius=1.67, minor_radius=1.25):
 
         #OutputFile = os.path.join("outputs", (str(Title) + ".png"))
         OutputFile = str(Title) + ".png"
@@ -1128,11 +1149,20 @@ class Tokamak(object):
         from raysect.optical.library.spectra.colours import red, green, blue, purple
         from raysect.primitive import Sphere
 
-        major_radius = 1.67
-        minor_radius = 0.67
+        # add general toroidal light source
+        height= 0.2
+        for vertdisp in [-1.0, -0.5, 0.5, 1.0]:
+            outer_cyl = Cylinder(major_radius*1.02, height,\
+                transform=translate(0, 0, (-0.5*height) + vertdisp))
+            inner_cyl = Cylinder(major_radius*0.98, height*1.2,\
+                transform=translate(0, 0, (-0.6*height) + vertdisp))
+            illumination = Subtract(outer_cyl, inner_cyl)
+            illumination.material = UniformSurfaceEmitter(d65_white, 3.0)
+            illumination.parent = self.world
 
         if WithWallCAD:
             # load CAD from inputs directory
+            print("This function is only set up for DIII-D so far, it's loading the DIII-D CAD")
             pfcs = import_stl(os.path.join(self.input_dir, "CAD_stl_files","d3d_CAD_full.stl"))
             pfcs.material = RoughTungsten(0.6)
             pfcs.name = "PFCs"
@@ -1140,25 +1170,20 @@ class Tokamak(object):
         else:
             # Add general bounding cylinder if not CAD
             bounding_height = minor_radius * 2.0 * 2.1
-            bounding_cyl = Cylinder((major_radius + minor_radius) * 1.1, bounding_height,\
+            bounding_cyl = Cylinder((major_radius + (BoundingCylMult*minor_radius)) * 1.1, bounding_height,\
                                     transform=translate(0, 0, -0.5*bounding_height))
             bounding_cyl.material = RoughTungsten(0.6)
             bounding_cyl.parent = self.world
-        
-        # add general toroidal light source
-        height= 0.1
-        vertDisp = 0.6
-        outer_cyl = Cylinder(major_radius*1.02, height, transform=translate(0, 0, (-0.5*height) - vertDisp))
-        inner_cyl = Cylinder(major_radius*0.98, height*1.2, transform=translate(0, 0, (-0.6*height)-vertDisp))
-        illumination = Subtract(outer_cyl, inner_cyl)
-        illumination.material = UniformSurfaceEmitter(d65_white, 1.0)
-        illumination.parent = self.world
-        
-        outer_cyl = Cylinder(major_radius*1.02, height, transform=translate(0, 0, (-0.5*height) + vertDisp))
-        inner_cyl = Cylinder(major_radius*0.98, height*1.2, transform=translate(0, 0, (-0.6*height)+vertDisp))
-        illumination2 = Subtract(outer_cyl, inner_cyl)
-        illumination2.material = UniformSurfaceEmitter(d65_white, 1.0)
-        illumination2.parent = self.world
+
+            # near wall light strips:
+            for vertdisp in [-1.0, -0.5, 00, 0.5, 1.0]:
+                outer_cyl = Cylinder((major_radius + (BoundingCylMult*minor_radius))*1.08, height,\
+                    transform=translate(0, 0, (-0.5*height) + vertdisp))
+                inner_cyl = Cylinder((major_radius + (BoundingCylMult*minor_radius))*1.06, height*1.2,\
+                    transform=translate(0, 0, (-0.6*height) + vertdisp))
+                illumination = Subtract(outer_cyl, inner_cyl)
+                illumination.material = UniformSurfaceEmitter(d65_white, 3.0)
+                illumination.parent = self.world
         
         rgb = RGBPipeline2D(name="sRGB", display_progress=False)
         sampler = RGBAdaptiveSampler2D(rgb, ratio=100, fraction=0.2, min_samples=500, cutoff=0.05)
@@ -1166,44 +1191,28 @@ class Tokamak(object):
 
         # Add indicator lights and set casing material
         for bolo in self.bolometers:
-            bolo.bolometer_camera.camera_geometry.material = Roughen(Aluminium(), 0.2)
-            foils = bolo.bolometer_camera.foil_detectors
-            for foil in foils:
-                center_point = foil.centre_point
-                #print(center_point)
-                CenterPoint = Sphere(0.001, parent=self.world,\
-                    transform=translate(center_point.x, center_point.y, center_point.z))
-                CenterPoint.material = UniformSurfaceEmitter(red, 100.0)
+            #if bolo.name == "KB5H_12":
+            if True:
+                bolo.bolometer_camera.camera_geometry.material = RoughTungsten(0.6)
+
+                foils = bolo.bolometer_camera.foil_detectors
+                for foil in foils:
+                    center_point = foil.centre_point
+                    CenterPoint = Sphere(IndLightSize, parent=self.world,\
+                        transform=translate(center_point.x, center_point.y, center_point.z))
+                    CenterPoint.material = UniformSurfaceEmitter(red, 100.0)
+            else:
+                bolo.bolometer_camera.parent = None
         
         if CameraType == 0:
-            # Camera that looks in the counterclockwise toroidal direction from Y=0, X=1.85
-            # This looks at disruption bolo location (When displaced to center of plasma chamber)
-            transform=rotate(0.0, 0.0, TorAngleDeg-2.0)\
-                           *translate(0.0, major_radius, 0.0)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
-        elif CameraType == 3:
+            # Camera that looks in the counterclockwise toroidal direction
+            transform=rotate(0.0, 0.0, TorAngleDeg - 90.0 - (1.0*ZoomMult))\
+                        *translate(0.0, major_radius + Radjust, Zadjust)\
+                        *rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
+        elif CameraType == 1:
             # Camera for viewing outboard side
             transform=rotate(0.0, 0.0, TorAngleDeg-180.0)\
-                           *translate(-0.8*major_radius, 0.0, 0.0)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
-        elif CameraType == 4:
-            # Camera for viewing outboard side
-            transform=rotate(0.0, 0.0, TorAngleDeg-180.0)\
-                           *translate(-0.9*major_radius, 0.0, 0.0)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
-        elif CameraType == 5:
-            # Camera for viewing outboard side above midplane
-            transform=rotate(0.0, 0.0, TorAngleDeg-180.0)\
-                           *translate(-0.9*major_radius, 0.0, 0.4)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
-        elif CameraType == 6:
-            # Camera for viewing outboard side above midplane
-            transform=rotate(0.0, 0.0, TorAngleDeg-180.0)\
-                           *translate(-1.1*major_radius, 0.0, 0.4)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
-        elif CameraType == 7:
-            # Camera for viewing outboard side above midplane, in upper midplane port
-            transform=rotate(0.0, 0.0, TorAngleDeg-180.0)\
-                           *translate(-1.2*major_radius, 0.0, 0.5)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
-        elif CameraType == 8:
-            # Camera for viewing outboard side above midplane, in upper midplane port
-            transform=rotate(0.0, 0.0, TorAngleDeg-180.0)\
-                           *translate(-1.35*major_radius, 0.0, 0.75)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
+                           *translate(-1.0 * ZoomMult *major_radius, 0.0, Zadjust)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
         else:
             raise Exception("Camera type does not match an option")
                            
@@ -1229,3 +1238,7 @@ class Tokamak(object):
         plt.ioff()
         #rgb.display()
         rgb.save(OutputFile)
+
+        # --- Add each bolometer back to the world
+        for bolo in self.bolometers:
+            bolo._change_parent(value=self.world)
