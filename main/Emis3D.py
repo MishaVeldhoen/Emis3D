@@ -83,7 +83,7 @@ from lmfit import minimize, report_fit
 from scipy.integrate import simpson
 
 import main.Util_emis3D as Util_emis3D
-from main.Globals import *
+from main.Globals import EMIS3D_INPUTS_DIRECTORY
 from main.Tokamak import Tokamak
 from main.Util import (
     config_loader,
@@ -192,8 +192,8 @@ class Emis3D:
         try:
             if pathFileName is None:
                 if tokamakName is not None and runConfigName is not None:
-                    pathFileName = join(
-                        EMIS3D_INPUTS_DIRECTORY, tokamakName, "runs", runConfigName
+                    pathFileName = str(
+                        EMIS3D_INPUTS_DIRECTORY / tokamakName / "runs" / runConfigName
                     )
                 else:
                     raise Exception(
@@ -202,10 +202,10 @@ class Emis3D:
                     )
 
             # --- Load the configuration file, if it exists
-            if not os.path.isfile(pathFileName):
+            if not os.path.isfile(str(pathFileName)):
                 raise Exception(f"File does not exist: {pathFileName}")
 
-            self.info = config_loader(pathFileName, verbose=self.verbose)
+            self.info = config_loader(str(pathFileName), verbose=self.verbose)
 
             # --- Raise exception if the file failed to load
             if self.info is None:
@@ -1243,12 +1243,12 @@ class Emis3D:
         else:
             filename = f"{self.info['shot']}_bestFits_{keys[0]:.3f}.dill"
 
-        pathFileName = join(
-            EMIS3D_INPUTS_DIRECTORY,
-            self.info["tokamakName"],
-            "runs",
-            str(self.info["shot"]),
-            filename,
+        pathFileName = (
+            EMIS3D_INPUTS_DIRECTORY
+            / self.info["tokamakName"]
+            / "runs"
+            / str(self.info["shot"])
+            / filename
         )
 
         save_results(
@@ -1424,17 +1424,17 @@ class Emis3D:
         if save:
             if "shot" in self.info and "tokamakName" in self.info:
                 filename = f"{self.info['shot']}_{evalTime:.4f}.png"
-                img_dir = join(
-                    EMIS3D_INPUTS_DIRECTORY,
-                    self.info["tokamakName"],
-                    "runs",
-                    str(self.info["shot"]),
-                    "images",
+                img_dir = (
+                    EMIS3D_INPUTS_DIRECTORY
+                    / self.info["tokamakName"]
+                    / "runs"
+                    / str(self.info["shot"])
+                    / "images"
                 )
 
                 # --- Make the directory
                 os.makedirs(img_dir, exist_ok=True)
-                out_path = join(img_dir, filename)
+                out_path = img_dir / filename
                 plt.savefig(out_path, dpi=100, format="png")
                 print(f"→ Figure saved to {out_path}")
 

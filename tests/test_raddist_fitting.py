@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from main.Globals import (
-    FILE_PATH,
+    EMIS3D_PARENT_DIRECTORY,
     EMIS3D_PARENT_DIRECTORY,
     EMIS3D_TOKMAK_DIRECTORY,
     SUPPORTED_TOKAMAKS,
@@ -28,7 +28,9 @@ from main.radDistFitting import RadDistFitting
 class TestGlobals:
 
     def test_file_path_is_directory(self):
-        assert os.path.isdir(FILE_PATH), f"FILE_PATH '{FILE_PATH}' is not a directory"
+        assert os.path.isdir(
+            EMIS3D_PARENT_DIRECTORY
+        ), f"EMIS3D_PARENT_DIRECTORY '{EMIS3D_PARENT_DIRECTORY}' is not a directory"
 
     def test_parent_directory_exists(self):
         assert os.path.isdir(EMIS3D_PARENT_DIRECTORY)

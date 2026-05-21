@@ -12,14 +12,12 @@ TODO: Update powerPerBin and uncomment it from the self.build()
 
 """
 
-import os
-
 import numpy as np
 from cherab.tools.emitters import RadiationFunction
 from raysect.optical import VolumeTransform  # type: ignore
 
 import main.Util_radDist as Util_radDist
-from main.Globals import *
+from main.Globals import EMIS3D_INPUTS_DIRECTORY
 from main.Tokamak import Tokamak
 from main.Util import XY_To_RPhi, convert_arrays_to_list, save_json
 import matplotlib.pyplot as plt
@@ -926,12 +924,12 @@ class Helical(RadDist):
         folderName = f"{self.info['distType']}_polSigma_{self.info['polSigma']}_sigmaKernel{self.info['sigmaKernel']}"
         saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
 
-        pathFileName = os.path.join(
-            EMIS3D_INPUTS_DIRECTORY,
-            self.info["tokamakName"],
-            "radDists",
-            self.info["saveRunsDirectoryName"],
-            folderName,
+        pathFileName = (
+            EMIS3D_INPUTS_DIRECTORY
+            / self.info["tokamakName"]
+            / "radDists"
+            / self.info["saveRunsDirectoryName"]
+            / folderName,
         )
 
         save_json(toSave, pathFileName, saveFileName)
@@ -1118,12 +1116,12 @@ class HelicalRing(RadDist):
         folderName = f"{self.info['distType']}_polSigma_{self.info['polSigma']}_rotation{self.info['rotationAngle']}"
         saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
 
-        pathFileName = os.path.join(
-            EMIS3D_INPUTS_DIRECTORY,
-            self.info["tokamakName"],
-            "radDists",
-            self.info["saveRunsDirectoryName"],
-            folderName,
+        pathFileName = (
+            EMIS3D_INPUTS_DIRECTORY
+            / self.info["tokamakName"]
+            / "radDists"
+            / self.info["saveRunsDirectoryName"]
+            / folderName
         )
 
         save_json(toSave, pathFileName, saveFileName)
@@ -1234,12 +1232,12 @@ class ElongatedRing(RadDist):
         folderName = f"{self.info['distType']}_polSigma_{self.info['polSigma']}_rotation{self.info['rotationAngle']}"
         saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
 
-        pathFileName = os.path.join(
-            EMIS3D_INPUTS_DIRECTORY,
-            self.info["tokamakName"],
-            "radDists",
-            self.info["saveRunsDirectoryName"],
-            folderName,
+        pathFileName = (
+            EMIS3D_INPUTS_DIRECTORY
+            / self.info["tokamakName"]
+            / "radDists"
+            / self.info["saveRunsDirectoryName"]
+            / folderName
         )
 
         save_json(toSave, pathFileName, saveFileName)
@@ -1355,12 +1353,12 @@ class SquareTube(RadDist):
         folderName = f"{self.info['distType']}_polSigma_{self.info['polSigma']}_rotation{self.info['rotationAngle']}"
         saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
 
-        pathFileName = os.path.join(
-            EMIS3D_INPUTS_DIRECTORY,
-            self.info["tokamakName"],
-            "radDists",
-            self.info["saveRunsDirectoryName"],
-            folderName,
+        pathFileName = (
+            EMIS3D_INPUTS_DIRECTORY
+            / self.info["tokamakName"]
+            / "radDists"
+            / self.info["saveRunsDirectoryName"]
+            / folderName
         )
 
         save_json(toSave, pathFileName, saveFileName)

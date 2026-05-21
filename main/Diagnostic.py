@@ -11,6 +11,7 @@ self.ax0, etc. for each variable. -JLH August, 2025.
 
 TODO
 1. Add more camera input options (from stl files, for example)
+2. Remove self.load_kb5_camera eventually, this was just added to compare building the JET bolometer from primitives
 """
 
 import os
@@ -25,7 +26,7 @@ from raysect.core import (
     translate,
 )
 from raysect.optical import AbsorbingSurface, NullMaterial  # type: ignore
-from main.Globals import *
+from main.Globals import EMIS3D_TOKMAK_DIRECTORY
 from main.Util import RPhi_To_XY, config_loader, rotate_vector
 from raysect.primitive import Box, Subtract
 
@@ -54,12 +55,12 @@ class Bolometer(object):
         Loads the configuration file for the given diagnostic
         """
 
-        pathFileName = join(
-            EMIS3D_TOKMAK_DIRECTORY,
-            tokamakName,
-            "inputs",
-            "sxrInfo",
-            f"{self.configFileName}",
+        pathFileName = (
+            EMIS3D_TOKMAK_DIRECTORY
+            / tokamakName
+            / "inputs"
+            / "sxrInfo"
+            / f"{self.configFileName}"
         )
 
         # --- Load the configuration file, if it exists
@@ -83,17 +84,18 @@ class Bolometer(object):
         if self.info is not None and "SUBARRAY_NAMES" in self.info:
             if len(self.info["SUBARRAY_NAMES"]) > 0:
                 for ii, fileName in enumerate(self.info["SUBARRAY_CONFIG_NAMES"]):
-                    pathFileName = join(
-                        EMIS3D_TOKMAK_DIRECTORY,
-                        tokamakName,
-                        "inputs",
-                        "sxrInfo",
-                        f"{fileName}",
+                    pathFileName = (
+                        EMIS3D_TOKMAK_DIRECTORY
+                        / tokamakName
+                        / "inputs"
+                        / "sxrInfo"
+                        / f"{fileName}",
                     )
+
                     if "SUBARRAYS" not in self.info:
                         self.info["SUBARRAYS"] = {}
                     self.info["SUBARRAYS"][self.info["SUBARRAY_NAMES"][ii]] = (
-                        config_loader(pathFileName)
+                        config_loader(str(pathFileName))
                     )
 
     def _build(self) -> None:

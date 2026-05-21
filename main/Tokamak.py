@@ -11,6 +11,7 @@ TODO:
 1) Currently the field lines are stored based on toroidal start location, this may be problematic for the
 helical radDist when initilizing many field lines at the same location. Solution: Store the field lines
 under {startPhi}_R_{startR:.2f}_z_{startz:.2f}, instead of just {startPhi}. OR... is this really an issue?
+2) update self.synth_camera_test so the figure will output to a better location
 """
 
 import os
@@ -29,7 +30,11 @@ from raysect.primitive import Cylinder, import_stl, Subtract
 
 from main.Diagnostic import Bolometer
 from main.Fieldline_Tracer import Fieldline_Tracer
-from main.Globals import *
+from main.Globals import (
+    EMIS3D_TOKMAK_DIRECTORY,
+    EMIS3D_INPUTS_DIRECTORY,
+    SUPPORTED_TOKAMAKS,
+)
 from main.Util import (
     config_loader,
     point3d_to_rz,
@@ -82,9 +87,7 @@ class Tokamak(object):
             self._load_config_file(tokamakName, mode, reflections, eqFileName)
 
             # --- Set the general input directory
-            self.input_dir = os.path.join(
-                EMIS3D_TOKMAK_DIRECTORY, tokamakName, "inputs"
-            )
+            self.input_dir = EMIS3D_TOKMAK_DIRECTORY / tokamakName / "inputs"
 
             # --- Run the startup program
             self._tokamak_startup(loadBolometers=loadBolometers)
@@ -94,8 +97,8 @@ class Tokamak(object):
         Loads the configuration file for the given tokamak
         """
 
-        pathFileName = os.path.join(
-            EMIS3D_TOKMAK_DIRECTORY, tokamakName, f"{tokamakName}_settings.yaml"
+        pathFileName = (
+            EMIS3D_TOKMAK_DIRECTORY / tokamakName / f"{tokamakName}_settings.yaml"
         )
 
         # --- Load the configuration file, if it exists
@@ -161,12 +164,13 @@ class Tokamak(object):
             return
 
         try:
-            pathFileName = os.path.join(
-                EMIS3D_INPUTS_DIRECTORY,
-                self.info["tokamakName"],
-                "eqdsks",
-                self.info["eqFileName"],
+            pathFileName = (
+                EMIS3D_INPUTS_DIRECTORY
+                / self.info["tokamakName"]
+                / "eqdsks"
+                / self.info["eqFileName"]
             )
+
             if os.path.isfile(pathFileName):
                 with open(pathFileName) as f:
                     self.gfile = geqdsk.read(f)
@@ -202,9 +206,8 @@ class Tokamak(object):
 
         # --- Load the wall from the text file
         elif "wallFileName" in self.info["MACHINE"]:
-            pathFileName = os.path.join(
-                self.input_dir, self.info["MACHINE"]["wallFileName"]
-            )
+            pathFileName = self.input_dir / self.info["MACHINE"]["wallFileName"]
+
             try:
                 rzarray = np.loadtxt(pathFileName, skiprows=0)
             except:
@@ -321,11 +324,12 @@ class Tokamak(object):
                 if self.info["MACHINE"]["STL_UNITS"].lower() == "mm":
                     STL_SCALE = 1.0e-3
 
-                PFC_STL_PATH = os.path.join(
-                    self.input_dir,
-                    "CAD_stl_files",
-                    self.info["MACHINE"]["PFC_STL_PATH"],
+                PFC_STL_PATH = (
+                    self.input_dir
+                    / "CAD_stl_files"
+                    / self.info["MACHINE"]["PFC_STL_PATH"]
                 )
+
                 if os.path.isfile(PFC_STL_PATH):
                     pfcs = import_stl(PFC_STL_PATH, scaling=STL_SCALE)
                     # pfcs.transform=rotate_x(90)
@@ -749,7 +753,7 @@ class Tokamak(object):
                             color="red",
                         )
             bolo._change_parent(value=None)
-        
+
         # --- Add back each bolometer from the world
         for bolo in self.bolometers:
             bolo._change_parent(value=self.world)
@@ -1131,96 +1135,142 @@ class Tokamak(object):
         # --- Unbuild the tokamak
         self._change_object_parent(parent=self.world)
 
-    def synth_camera_test(self, CameraType = 0, TorAngleDeg=0.0,\
-                        Title = "render",\
-                        SpecBins=25, PixelSamples=250,\
-                        WithWallCAD=True, IndLightSize = 0.001, BoundingCylMult=1.0,\
-                        ZoomMult=1.0, Zadjust=0.0, Radjust=0.0,\
-                        major_radius=1.67, minor_radius=1.25):
+    def synth_camera_test(
+        self,
+        CameraType=0,
+        TorAngleDeg=0.0,
+        Title="render",
+        SpecBins=25,
+        PixelSamples=250,
+        WithWallCAD=True,
+        IndLightSize=0.001,
+        BoundingCylMult=1.0,
+        ZoomMult=1.0,
+        Zadjust=0.0,
+        Radjust=0.0,
+        major_radius=1.67,
+        minor_radius=1.25,
+    ):
 
-        #OutputFile = os.path.join("outputs", (str(Title) + ".png"))
+        # OutputFile = os.path.join("outputs", (str(Title) + ".png"))
         OutputFile = str(Title) + ".png"
 
-        from raysect.core.math import translate, rotate_x, rotate_z
-        from raysect.optical.observer import PinholeCamera, RGBPipeline2D, RGBAdaptiveSampler2D
-        from raysect.optical import rotate, d65_white
+        from raysect.core.math import translate
+        from raysect.optical.observer import PinholeCamera, RGBPipeline2D, RGBAdaptiveSampler2D  # type: ignore
+        from raysect.optical import rotate, d65_white  # type: ignore
         from raysect.optical.library import Aluminium
-        from raysect.optical.material import UniformSurfaceEmitter, Roughen
+        from raysect.optical.material import UniformSurfaceEmitter  # type: ignore
         from raysect.optical.library.spectra.colours import red, green, blue, purple
         from raysect.primitive import Sphere
 
         # add general toroidal light source
-        height= 0.2
+        height = 0.2
         for vertdisp in [-1.0, -0.5, 0.5, 1.0]:
-            outer_cyl = Cylinder(major_radius*1.02, height,\
-                transform=translate(0, 0, (-0.5*height) + vertdisp))
-            inner_cyl = Cylinder(major_radius*0.98, height*1.2,\
-                transform=translate(0, 0, (-0.6*height) + vertdisp))
+            outer_cyl = Cylinder(
+                major_radius * 1.02,
+                height,
+                transform=translate(0, 0, (-0.5 * height) + vertdisp),
+            )
+            inner_cyl = Cylinder(
+                major_radius * 0.98,
+                height * 1.2,
+                transform=translate(0, 0, (-0.6 * height) + vertdisp),
+            )
             illumination = Subtract(outer_cyl, inner_cyl)
             illumination.material = UniformSurfaceEmitter(d65_white, 3.0)
             illumination.parent = self.world
 
         if WithWallCAD:
             # load CAD from inputs directory
-            print("This function is only set up for DIII-D so far, it's loading the DIII-D CAD")
-            pfcs = import_stl(os.path.join(self.input_dir, "CAD_stl_files","d3d_CAD_full.stl"))
+            print(
+                "This function is only set up for DIII-D so far, it's loading the DIII-D CAD"
+            )
+            pfcs = import_stl(self.input_dir / "CAD_stl_files" / "d3d_CAD_full.stl")
+
             pfcs.material = RoughTungsten(0.6)
             pfcs.name = "PFCs"
             pfcs.parent = self.world
         else:
             # Add general bounding cylinder if not CAD
             bounding_height = minor_radius * 2.0 * 2.1
-            bounding_cyl = Cylinder((major_radius + (BoundingCylMult*minor_radius)) * 1.1, bounding_height,\
-                                    transform=translate(0, 0, -0.5*bounding_height))
+            bounding_cyl = Cylinder(
+                (major_radius + (BoundingCylMult * minor_radius)) * 1.1,
+                bounding_height,
+                transform=translate(0, 0, -0.5 * bounding_height),
+            )
             bounding_cyl.material = RoughTungsten(0.6)
             bounding_cyl.parent = self.world
 
             # near wall light strips:
             for vertdisp in [-1.0, -0.5, 00, 0.5, 1.0]:
-                outer_cyl = Cylinder((major_radius + (BoundingCylMult*minor_radius))*1.08, height,\
-                    transform=translate(0, 0, (-0.5*height) + vertdisp))
-                inner_cyl = Cylinder((major_radius + (BoundingCylMult*minor_radius))*1.06, height*1.2,\
-                    transform=translate(0, 0, (-0.6*height) + vertdisp))
+                outer_cyl = Cylinder(
+                    (major_radius + (BoundingCylMult * minor_radius)) * 1.08,
+                    height,
+                    transform=translate(0, 0, (-0.5 * height) + vertdisp),
+                )
+                inner_cyl = Cylinder(
+                    (major_radius + (BoundingCylMult * minor_radius)) * 1.06,
+                    height * 1.2,
+                    transform=translate(0, 0, (-0.6 * height) + vertdisp),
+                )
                 illumination = Subtract(outer_cyl, inner_cyl)
                 illumination.material = UniformSurfaceEmitter(d65_white, 3.0)
                 illumination.parent = self.world
-        
+
         rgb = RGBPipeline2D(name="sRGB", display_progress=False)
-        sampler = RGBAdaptiveSampler2D(rgb, ratio=100, fraction=0.2, min_samples=500, cutoff=0.05)
-        fov=140
+        sampler = RGBAdaptiveSampler2D(
+            rgb, ratio=100, fraction=0.2, min_samples=500, cutoff=0.05
+        )
+        fov = 140
 
         # Add indicator lights and set casing material
         for bolo in self.bolometers:
-            #if bolo.name == "KB5H_12":
+            # if bolo.name == "KB5H_12":
             if True:
                 bolo.bolometer_camera.camera_geometry.material = RoughTungsten(0.6)
 
                 foils = bolo.bolometer_camera.foil_detectors
                 for foil in foils:
                     center_point = foil.centre_point
-                    CenterPoint = Sphere(IndLightSize, parent=self.world,\
-                        transform=translate(center_point.x, center_point.y, center_point.z))
+                    CenterPoint = Sphere(
+                        IndLightSize,
+                        parent=self.world,
+                        transform=translate(
+                            center_point.x, center_point.y, center_point.z
+                        ),
+                    )
                     CenterPoint.material = UniformSurfaceEmitter(red, 100.0)
             else:
                 bolo.bolometer_camera.parent = None
-        
+
         if CameraType == 0:
             # Camera that looks in the counterclockwise toroidal direction
-            transform=rotate(0.0, 0.0, TorAngleDeg - 90.0 - (1.0*ZoomMult))\
-                        *translate(0.0, major_radius + Radjust, Zadjust)\
-                        *rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
+            transform = (
+                rotate(0.0, 0.0, TorAngleDeg - 90.0 - (1.0 * ZoomMult))
+                * translate(0.0, major_radius + Radjust, Zadjust)
+                * rotate(0.0, -90.0, 0.0)
+                * rotate(90.0, 0.0, 0.0)
+            )
         elif CameraType == 1:
             # Camera for viewing outboard side
-            transform=rotate(0.0, 0.0, TorAngleDeg-180.0)\
-                           *translate(-1.0 * ZoomMult *major_radius, 0.0, Zadjust)*rotate(0.0, -90.0, 0.0)*rotate(90.0, 0.0, 0.0)
+            transform = (
+                rotate(0.0, 0.0, TorAngleDeg - 180.0)
+                * translate(-1.0 * ZoomMult * major_radius, 0.0, Zadjust)
+                * rotate(0.0, -90.0, 0.0)
+                * rotate(90.0, 0.0, 0.0)
+            )
         else:
             raise Exception("Camera type does not match an option")
-                           
-        camera = PinholeCamera((350, 250), fov=fov, parent=self.world,\
-                       transform=transform,\
-                       pipelines=[rgb], frame_sampler=sampler)
-        
-        
+
+        camera = PinholeCamera(
+            (350, 250),
+            fov=fov,
+            parent=self.world,
+            transform=transform,
+            pipelines=[rgb],
+            frame_sampler=sampler,
+        )
+
         camera.spectral_bins = SpecBins
         camera.pixel_samples = PixelSamples
 
@@ -1234,9 +1284,9 @@ class Tokamak(object):
             stopRender = input("Stop? (y to stop)")
             if stopRender == "y":
                 break
-        
+
         plt.ioff()
-        #rgb.display()
+        # rgb.display()
         rgb.save(OutputFile)
 
         # --- Add each bolometer back to the world
