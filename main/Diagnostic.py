@@ -13,7 +13,6 @@ TODO
 1. Add more camera input options (from stl files, for example)
 """
 
-
 import os
 
 import numpy as np
@@ -25,7 +24,7 @@ from raysect.core import (
     Vector3D,
     translate,
 )
-from raysect.optical import AbsorbingSurface, NullMaterial  # type:ignore
+from raysect.optical import AbsorbingSurface, NullMaterial  # type: ignore
 from main.Globals import *
 from main.Util import RPhi_To_XY, config_loader, rotate_vector
 from raysect.primitive import Box, Subtract
@@ -160,11 +159,11 @@ class Bolometer(object):
         WALL_THICKNESS = 0.005  # 5 mm thick walls
 
         # --- Derived dimensions
-        half_array_width = (
-            np.max(
-            [np.max(np.abs(FOIL_POSITIONS)) * FOIL_SEPARATION + FOIL_WIDTH / 2,
-            SLIT_WIDTH/2]
-            )
+        half_array_width = np.max(
+            [
+                np.max(np.abs(FOIL_POSITIONS)) * FOIL_SEPARATION + FOIL_WIDTH / 2,
+                SLIT_WIDTH / 2,
+            ]
         )
         clear_width = 2 * half_array_width
         clear_height = 2 * max(SLIT_HEIGHT, FOIL_HEIGHT)
@@ -224,7 +223,9 @@ class Bolometer(object):
             name="Housing with Aperture",
         )
 
-        camera_housing.material = AbsorbingSurface()  # AbsorbingSurface() or NullMaterial()
+        camera_housing.material = (
+            AbsorbingSurface()
+        )  # AbsorbingSurface() or NullMaterial()
 
         # Attach the finished housing to the camera
         bolometer_camera.camera_geometry = camera_housing
@@ -285,7 +286,7 @@ class Bolometer(object):
         skew_rad = 0.0
         if "SKEW_ANGLE" in self.info:
             skew_rad = np.deg2rad(self.info["SKEW_ANGLE"])
-            
+
         e_phi_skewed = rotate_vector(e_phi, e_z, skew_rad).normalise()
 
         # Rotate e_z in R–z plane for poloidal tilt
@@ -336,7 +337,13 @@ class Bolometer(object):
         of any calculated values
         """
 
-        if self.info is not None and "ETENDUE" in self.info:
+        if self.info is None:
+            print(
+                "Bolometer configuration info is missing; cannot build from primitives."
+            )
+            return
+
+        if "ETENDUE" in self.info:
             self.etendues = self.info["ETENDUE"]
             self.etendues_error = (
                 self.info["ETENDUE_ERROR"]
@@ -344,7 +351,7 @@ class Bolometer(object):
                 else [0.0] * len(self.etendues)
             )
             return
-        
+
         if "FOIL_SLIT_ANGLE_FACTOR" in self.info:
             FOIL_SLIT_ANGLE_FACTOR = self.info["FOIL_SLIT_ANGLE_FACTOR"]
         else:
@@ -507,7 +514,7 @@ class Bolometer(object):
             raise RuntimeError("Material input must be Absorbing or Null")
 
         mat = AbsorbingSurface()
-        if mat == "Null":
+        if material == "Null":
             mat = NullMaterial()
 
         for c_ in self.bolometer_camera.children:

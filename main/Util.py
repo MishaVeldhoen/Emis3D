@@ -9,10 +9,8 @@ import os
 import h5py
 import numpy as np
 import yaml
-from raysect.core import Point2D, translate, AffineMatrix3D
+from raysect.core import Point2D
 from typing import Any
-
-# from scipy.stats import chi2, removing to speed up things
 
 
 def config_loader(pathFileName="", verbose=False):
@@ -25,7 +23,7 @@ def config_loader(pathFileName="", verbose=False):
         return config
 
     except Exception as e:
-        print(f"Could not load the cofiguration file: {pathFileName}, error: {e}")
+        print(f"Could not load the configuration file: {pathFileName}, error: {e}")
         return None
 
 
@@ -185,6 +183,9 @@ def rZ_to_theta(r, z, r0=None, z0=None):
     dz = z - z0
 
     t_ = np.rad2deg(np.arctan(dz / dr))
+
+    if dr == 0:
+        return 90.0 if dz > 0 else 270.0
 
     if dr < 0:
         if dz > 0:
@@ -452,6 +453,10 @@ def split_revolutions(x, y, z, phi, R, L) -> list:
                     "phi": np.mod(phi[mask], 2 * np.pi),
                 }
             )
+
+    # Filter out signle-point tail revolutions, occurs when phi[-1] equals
+    # N * 2pi, e.g. np.linspace(..., endpoint=True)
+    revolutions = [r for r in revolutions if len(r["phi"]) > 1]
 
     return revolutions
 

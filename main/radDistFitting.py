@@ -26,10 +26,12 @@ class RadDistFitting:
     def __init__(self, radDistPath: str | None = None) -> None:
         self.info = {}
         self.info["radDistPath"] = radDistPath
+        self._load_ok = False
 
         if radDistPath is not None:
             self._load_radDist()
-            self._map_signals()
+            if self._load_ok:
+                self._map_signals()
 
     def _load_radDist(self) -> None:
         """
@@ -39,11 +41,10 @@ class RadDistFitting:
             temp = load_json(self.info["radDistPath"])
             self.data = temp["data"]
             self.info.update(temp["info"])
+            self._load_ok = True
 
         except Exception as e:
-            print(
-                f"An error occured while trying to load the file: {self.info['radDistPath']}: {e}"
-            )
+            print(f"Could not load '{self.info['radDistPath']}': {e}")
 
     def _map_signals(self) -> None:
         """
@@ -178,7 +179,7 @@ class RadDistFitting:
         # --- Create parameters for the normal fitting case
         if boloNames is None:
             # --- Create constant multiplication value
-            paramName = f"a_{self.info['injectionLocation']}"
+            paramName = f"a_{int(self.info['injectionLocation'])}"
             self.fitSynthetic["params"]["paramName"].append(paramName)
             params.add(paramName, value=1.0, min=0)
 

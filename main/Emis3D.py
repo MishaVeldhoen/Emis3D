@@ -1393,7 +1393,7 @@ class Emis3D:
             ax.set_xlabel("Channel Number")
             ax.set_ylabel(f"Emission {units_label}")
             ax.set_title(f"{bolo_}")
-            ax.set_ylim(0, ymax * 1.02)
+            ax.set_ylim(0, float(ymax) * 1.02)
 
             if ii == 0:
                 ax.legend(fontsize=8)
