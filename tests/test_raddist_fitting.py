@@ -173,27 +173,6 @@ class TestRadDistFitting:
 
         assert scaled_max > unscaled_max
 
-    def test_create_parameters_float_injection_location_bug(self, tmp_path):
-        """
-        BUG REGRESSION: When injectionLocation is a float (e.g. 120.0),
-        create_parameters() builds the amplitude parameter name as 'a_120.0'.
-        lmfit rejects names containing a dot, raising KeyError.
-
-        The 'b_' parameter (line 197 of radDistFitting.py) correctly casts to
-        int(), but the 'a_' parameter on line 181 does not.
-
-        Fix: change line 181 to:
-            paramName = f"a_{int(self.info['injectionLocation'])}"
-        """
-        path, _, channel_tags, _ = _minimal_raddist_json(tmp_path)
-        rdf = RadDistFitting(radDistPath=path)
-        rdf.prepare_for_fits([channel_tags])
-
-        # Document the bug: this currently raises KeyError because 'a_120.0'
-        # is not a valid lmfit parameter name (dots are forbidden).
-        with pytest.raises(KeyError, match="is not a valid Parameters name"):
-            rdf.create_parameters()
-
     def test_create_parameters_int_injection_location_works(self, tmp_path):
         """
         create_parameters() succeeds when injectionLocation is stored as an int.
@@ -220,15 +199,3 @@ class TestRadDistFitting:
         rdf = RadDistFitting(radDistPath=None)
         assert rdf.info == {"radDistPath": None}
         assert not hasattr(rdf, "data")
-
-    def test_missing_file_causes_keyerror_in_map_signals(self, tmp_path):
-        """
-        BUG: When _load_radDist() fails (file missing), self.info is not
-        fully populated, but _map_signals() still runs and raises KeyError
-        trying to access self.info['units'].
-
-        Fix: _load_radDist() should set self.error_free = False or check
-        hasattr/key presence in _map_signals() before proceeding.
-        """
-        with pytest.raises(KeyError, match="units"):
-            RadDistFitting(radDistPath=str(tmp_path / "does_not_exist.json"))

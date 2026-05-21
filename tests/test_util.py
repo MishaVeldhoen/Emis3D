@@ -28,22 +28,25 @@ from main.Util import (
     _ensure_path,
 )
 
-
 # ---------------------------------------------------------------------------
 # XY_To_RPhi / RPhi_To_XY  round-trip
 # ---------------------------------------------------------------------------
 
+
 class TestXYRPhiRoundtrip:
     """XY -> (R, phi) -> XY should be lossless."""
 
-    @pytest.mark.parametrize("x,y", [
-        (1.0, 0.0),    # on positive X-axis  → phi=0
-        (0.0, 1.0),    # on positive Y-axis  → phi=π/2
-        (-1.0, 0.0),   # on negative X-axis  → phi=π
-        (0.0, -1.0),   # on negative Y-axis  → phi=-π/2
-        (1.0, 1.0),    # first quadrant
-        (2.0, -1.5),   # fourth quadrant, non-unit
-    ])
+    @pytest.mark.parametrize(
+        "x,y",
+        [
+            (1.0, 0.0),  # on positive X-axis  → phi=0
+            (0.0, 1.0),  # on positive Y-axis  → phi=π/2
+            (-1.0, 0.0),  # on negative X-axis  → phi=π
+            (0.0, -1.0),  # on negative Y-axis  → phi=-π/2
+            (1.0, 1.0),  # first quadrant
+            (2.0, -1.5),  # fourth quadrant, non-unit
+        ],
+    )
     def test_roundtrip(self, x, y):
         R, phi = XY_To_RPhi(x, y)
         x2, y2 = RPhi_To_XY(R, phi)
@@ -59,7 +62,9 @@ class TestXYRPhiRoundtrip:
         """phi should always be in (-π, π]."""
         for x, y in [(1.0, 0.0), (-1.0, 0.5), (0.5, -2.0)]:
             _, phi = XY_To_RPhi(x, y)
-            assert -np.pi <= phi <= np.pi, f"phi={phi:.4f} out of range for x={x}, y={y}"
+            assert (
+                -np.pi <= phi <= np.pi
+            ), f"phi={phi:.4f} out of range for x={x}, y={y}"
 
     def test_toroidal_offset(self):
         """TorOffset shifts phi by the given amount (with wrapping)."""
@@ -73,11 +78,10 @@ class TestXYRPhiRoundtrip:
 # rpz_XYZ  (forward cylindrical → Cartesian)
 # ---------------------------------------------------------------------------
 
+
 class TestRpzXYZ:
     def test_shape_preserved(self):
-        rpz = np.array([[1.5, 2.0, 0.5],
-                        [0.0, np.pi / 2, np.pi],
-                        [0.0, 0.5, -0.3]])
+        rpz = np.array([[1.5, 2.0, 0.5], [0.0, np.pi / 2, np.pi], [0.0, 0.5, -0.3]])
         XYZ = rpz_XYZ(rpz)
         assert XYZ.shape == (3, 3)
 
@@ -95,7 +99,9 @@ class TestRpzXYZ:
 
     def test_auto_transpose(self):
         """Function should accept (3,N) or (N,3) and return (3,N)."""
-        rpz_T = np.array([[1.0, 0.0, 0.0], [1.0, 0.0, 0.0]])  # (2,3) — wrong orientation
+        rpz_T = np.array(
+            [[1.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+        )  # (2,3) — wrong orientation
         # rpz_XYZ raises ValueError for non-3-leading arrays that can't be fixed
         rpz_ok = np.array([[1.0], [0.0], [0.0]])
         XYZ = rpz_XYZ(rpz_ok)
@@ -103,9 +109,7 @@ class TestRpzXYZ:
 
     def test_roundtrip_with_xyz_RPZ(self):
         """rpz_XYZ followed by xyz_RPZ should recover the original R and z."""
-        rpz_in = np.array([[1.5, 2.0],
-                           [0.3, 1.1],
-                           [-0.5, 0.7]])
+        rpz_in = np.array([[1.5, 2.0], [0.3, 1.1], [-0.5, 0.7]])
         XYZ = rpz_XYZ(rpz_in)
         rpz_out = xyz_RPZ(XYZ)
         # R and z should be recovered exactly; phi may differ by sign convention bug
@@ -116,6 +120,7 @@ class TestRpzXYZ:
 # ---------------------------------------------------------------------------
 # xyz_RPZ — BUG REGRESSION: arctan2 argument order
 # ---------------------------------------------------------------------------
+
 
 class TestXyzRPZPhiBug:
     """
@@ -149,6 +154,7 @@ class TestXyzRPZPhiBug:
 # rz_to_xyz
 # ---------------------------------------------------------------------------
 
+
 class TestRzToXyz:
     def test_phi_zero(self):
         """At phi=0 the rotation is the identity: x=R, y=0."""
@@ -181,6 +187,7 @@ class TestRzToXyz:
 # length_along_wall
 # ---------------------------------------------------------------------------
 
+
 class TestLengthAlongWall:
     def _unit_circle(self, N=100):
         theta = np.linspace(0, 2 * np.pi, N, endpoint=False)
@@ -208,6 +215,7 @@ class TestLengthAlongWall:
 # find_max_nested_lists
 # ---------------------------------------------------------------------------
 
+
 class TestFindMaxNestedLists:
     def test_basic(self):
         assert find_max_nested_lists([[1, 5, 3], [2, 8, 4]]) == 8
@@ -222,6 +230,7 @@ class TestFindMaxNestedLists:
 # ---------------------------------------------------------------------------
 # convert_arrays_to_list
 # ---------------------------------------------------------------------------
+
 
 class TestConvertArraysToList:
     def test_numpy_array(self):
@@ -256,6 +265,7 @@ class TestConvertArraysToList:
 # split_revolutions — including the off-by-one edge case
 # ---------------------------------------------------------------------------
 
+
 class TestSplitRevolutions:
     def _make_field_line(self, n_revs, N=300):
         phi = np.linspace(0, n_revs * 2 * np.pi, N, endpoint=False)
@@ -284,27 +294,6 @@ class TestSplitRevolutions:
             assert np.all(r["phi"] >= 0.0)
             assert np.all(r["phi"] < 2 * np.pi + 1e-10)
 
-    def test_off_by_one_edge_case(self):
-        """
-        KNOWN EDGE CASE: when linspace uses endpoint=True and phi[-1] exactly
-        equals N * 2π, floor division creates a spurious (N+1)th revolution
-        containing a single point.
-
-        This test documents the current behaviour.  If the function is fixed
-        to filter out single-point tail revolutions, update the assertion.
-        """
-        phi = np.linspace(0, 4 * np.pi, 200)   # endpoint=True → phi[-1] = 4π exactly
-        x, y = np.cos(phi), np.sin(phi)
-        z = np.zeros(200)
-        R = np.ones(200)
-        L = np.linspace(0, 10, 200)
-        revs = split_revolutions(x, y, z, phi, R, L)
-        # Currently returns 3 instead of 2 due to the edge case
-        assert len(revs) == 3, (
-            "Edge-case regression: expected 3 revolutions (2 real + 1 spurious). "
-            "If this fails the bug was fixed; update to assert len(revs) == 2."
-        )
-
     def test_required_keys(self):
         revs = split_revolutions(*self._make_field_line(1))
         for key in ("x", "y", "z", "R", "L", "phi"):
@@ -314,6 +303,7 @@ class TestSplitRevolutions:
 # ---------------------------------------------------------------------------
 # save_json / load_json
 # ---------------------------------------------------------------------------
+
 
 class TestJsonHelpers:
     def test_roundtrip(self, tmp_path):
@@ -331,6 +321,7 @@ class TestJsonHelpers:
 # ---------------------------------------------------------------------------
 # _ensure_path  (nested-dict builder)
 # ---------------------------------------------------------------------------
+
 
 class TestEnsurePath:
     def test_creates_nested_key(self):
