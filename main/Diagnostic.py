@@ -89,7 +89,7 @@ class Bolometer(object):
                         / tokamakName
                         / "inputs"
                         / "sxrInfo"
-                        / f"{fileName}",
+                        / f"{fileName}"
                     )
 
                     if "SUBARRAYS" not in self.info:

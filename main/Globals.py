@@ -14,7 +14,7 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Root of the user data tree. Overrride with EMIS3D_ROOT to decouple data
+# Root of the user data tree. Override with EMIS3D_ROOT to decouple data
 # from the source checkout (required when installed via pip)
 EMIS3D_PARENT_DIRECTORY: Path = Path(os.environ.get("EMIS3D_ROOT", _REPO_ROOT))
 
@@ -37,11 +37,4 @@ __all__ = [
     "SUPPORTED_TOKAMAKS",
 ]
 
-"""
-OLD
-FILE_PATH = dirname(realpath(__file__))
-EMIS3D_PARENT_DIRECTORY = dirname(FILE_PATH)
-EMIS3D_TOKMAK_DIRECTORY = join(EMIS3D_PARENT_DIRECTORY, "tokamaks")
-EMIS3D_INPUTS_DIRECTORY = join(EMIS3D_PARENT_DIRECTORY, "inputs")
-SUPPORTED_TOKAMAKS = ["DIII-D", "SPARC", "JET"]
-"""
+

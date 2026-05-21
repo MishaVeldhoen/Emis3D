@@ -929,7 +929,7 @@ class Helical(RadDist):
             / self.info["tokamakName"]
             / "radDists"
             / self.info["saveRunsDirectoryName"]
-            / folderName,
+            / folderName
         )
 
         save_json(toSave, pathFileName, saveFileName)
