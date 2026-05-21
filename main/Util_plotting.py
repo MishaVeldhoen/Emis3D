@@ -3,7 +3,6 @@
 Contains defintions used with various plotting routines
 """
 
-
 from raysect.core.math import AffineMatrix3D
 
 

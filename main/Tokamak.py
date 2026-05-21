@@ -12,8 +12,10 @@ TODO:
 helical radDist when initilizing many field lines at the same location. Solution: Store the field lines
 under {startPhi}_R_{startR:.2f}_z_{startz:.2f}, instead of just {startPhi}. OR... is this really an issue?
 2) update self.synth_camera_test so the figure will output to a better location
+3) Update create_cameras, I don't know what tok_r and tok_z are doing and they are re-assigned half-way through the definition
 """
 
+import logging
 import os
 
 import matplotlib.pyplot as plt
@@ -35,6 +37,10 @@ from main.Globals import (
     EMIS3D_INPUTS_DIRECTORY,
     SUPPORTED_TOKAMAKS,
 )
+
+logger = logging.getLogger(__name__)
+
+
 from main.Util import (
     config_loader,
     point3d_to_rz,
@@ -78,8 +84,8 @@ class Tokamak(object):
 
         self.verbose = verbose
         if tokamakName not in SUPPORTED_TOKAMAKS:
-            print(f"Please eneter a valid tokamak name!")
-            print(f"Tokamaks currently supported are: {SUPPORTED_TOKAMAKS}")
+            logger.debug(f"Please enter a valid tokamak name!")
+            logger.debug(f"Tokamaks currently supported are: {SUPPORTED_TOKAMAKS}")
             raise Exception
 
         else:
@@ -105,7 +111,7 @@ class Tokamak(object):
         if os.path.isfile(pathFileName):
             self.info = config_loader(pathFileName)
         else:
-            print(
+            logger.warning(
                 f"Could not load the configuration file, file does not exist: {pathFileName}"
             )
 
@@ -133,7 +139,7 @@ class Tokamak(object):
         """
 
         if self.info is None:
-            print("No tokamak information loaded, cannot continue!")
+            logger.error("No tokamak information loaded, cannot continue!")
             return
 
         # --- Create the raysect world
@@ -160,7 +166,7 @@ class Tokamak(object):
         """
         pathFileName = ""
         if self.info is None:
-            print("No tokamak information loaded, cannot continue!")
+            logger.error("No tokamak information loaded, cannot continue!")
             return
 
         try:
@@ -175,12 +181,12 @@ class Tokamak(object):
                 with open(pathFileName) as f:
                     self.gfile = geqdsk.read(f)
                 if self.verbose:
-                    print(f"Loaded equilibrium file: {pathFileName}")
+                    logger.debug(f"Loaded equilibrium file: {pathFileName}")
             else:
-                print(f"Equilibrium file not found!")
+                logger.debug(f"Equilibrium file not found!")
         except Exception as e:
-            print(f"Could not read the equlibrium file, error: {e}")
-            print(f"Tried to read it here: {pathFileName}")
+            logger.error(f"Could not read the equilibrium file, error: {e}")
+            logger.debug(f"Tried to read it here: {pathFileName}")
 
     def _load_first_wall(self) -> None:
         """
@@ -191,7 +197,7 @@ class Tokamak(object):
 
         # --- Checkers
         if self.info is None:
-            print("No tokamak information loaded, cannot continue!")
+            logger.error("No tokamak information loaded, cannot continue!")
             return
 
         rzarray = None
@@ -233,7 +239,7 @@ class Tokamak(object):
         PFC_STL_PATH = ""
 
         if self.info is None:
-            print("No tokamak information loaded, cannot continue!")
+            logger.error("No tokamak information loaded, cannot continue!")
             return
 
         self.cherab_objects = {}
@@ -342,15 +348,15 @@ class Tokamak(object):
                         for child in self.world.children:
                             child.material = AbsorbingSurface()
             except Exception as e:
-                print(f"Could not load the CAD tokamak file: {PFC_STL_PATH}")
-                print(f"Error: {e}")
+                logger.warning(f"Could not load the CAD tokamak file: {PFC_STL_PATH}")
+                logger.error(f"Error: {e}")
 
         else:
-            print("Building the tokamak failed")
-            print(
+            logger.error("Building the tokamak failed")
+            logger.warning(
                 f"Could not load the stl file for this tokamak, {PFC_STL_PATH} or the wall"
             )
-            print("was not loaded")
+            logger.debug("was not loaded")
 
     def _load_bolometers(self) -> None:
         """
@@ -363,7 +369,7 @@ class Tokamak(object):
         self.bolometers = []
 
         if self.info is None:
-            print("No tokamak information loaded, cannot continue!")
+            logger.error("No tokamak information loaded, cannot continue!")
             return
         # --- Store all of the bolometer groups, used to make plotting easier
         self.info["Bolometer Groups"] = []
@@ -433,11 +439,13 @@ class Tokamak(object):
         Changes the material of the emission surface, used for testing purposes
         """
         if self.info is None:
-            print("No tokamak information loaded, cannot continue!")
+            logger.error("No tokamak information loaded, cannot continue!")
             return
 
         if name not in ["Emission Surface", "Tokamak Wall"]:
-            print("Name must be one of these two: Emission Surface, Tokamak Wall")
+            logger.debug(
+                "Name must be one of these two: Emission Surface, Tokamak Wall"
+            )
             return
 
         for child in self.world.children:
@@ -453,7 +461,7 @@ class Tokamak(object):
             ax = f.add_subplot(111)
         """
         if self.wall is None:
-            print("No wall information loaded, cannot continue!")
+            logger.error("No wall information loaded, cannot continue!")
             return
 
         show_plt = False
@@ -481,7 +489,7 @@ class Tokamak(object):
         """
 
         if self.wall is None:
-            print("No wall information loaded, cannot continue!")
+            logger.error("No wall information loaded, cannot continue!")
             return
 
         # --- Generate points for the circle
@@ -537,13 +545,13 @@ class Tokamak(object):
         if ax is not None:
 
             if debug:
-                print("\n--- FOIL GEOMETRY ---")
-                print(f"Width  : {foil.y_width:.6f} m")
-                print(f"Height : {foil.x_width:.6f} m")
+                logger.debug("\n--- FOIL GEOMETRY ---")
+                logger.debug(f"Width  : {foil.y_width:.6f} m")
+                logger.debug(f"Height : {foil.x_width:.6f} m")
 
-                print("\n--- SLIT GEOMETRY ---")
-                print(f"Width  : {slit.dy:.6f} m")
-                print(f"Height : {slit.dx:.6f} m")
+                logger.debug("\n--- SLIT GEOMETRY ---")
+                logger.debug(f"Width  : {slit.dy:.6f} m")
+                logger.debug(f"Height : {slit.dx:.6f} m")
 
                 foil_center = foil.to_root() * foil.centre_point
                 slit_center = slit.to_root() * slit.centre_point
@@ -554,8 +562,8 @@ class Tokamak(object):
                     + (foil_center.z - slit_center.z) ** 2
                 )
 
-                print("\n--- FOIL to SLIT SEPARATION ---")
-                print(f"Center-to-center distance: {separation:.6f} m")
+                logger.debug("\n--- FOIL to SLIT SEPARATION ---")
+                logger.debug(f"Center-to-center distance: {separation:.6f} m")
 
             # Get corners
             foil_corners = get_rectangle_corners(foil)
@@ -635,12 +643,14 @@ class Tokamak(object):
 
         # --- Make sure self.info is initiated
         if self.info is None:
-            print("No tokamak information loaded, cannot continue!")
+            logger.error("No tokamak information loaded, cannot continue!")
             return
 
         # --- Check to see if boloGroupName is in self.info['Bolometer Groups']
         if boloGroupName not in self.info["Bolometer Groups"]:
-            print(f"{boloGroupName} is not found in self.info['Bolometer Groups']")
+            logger.debug(
+                f"{boloGroupName} is not found in self.info['Bolometer Groups']"
+            )
             return
 
         # --- Remove each bolometer from the world
@@ -771,12 +781,14 @@ class Tokamak(object):
 
         # --- Make sure self.info is initiated
         if self.info is None:
-            print("No tokamak information loaded, cannot continue!")
+            logger.error("No tokamak information loaded, cannot continue!")
             return None
 
         # --- Check to see if boloGroupName is in self.info['Bolometer Groups']
         if boloGroupName not in self.info["Bolometer Groups"]:
-            print(f"{boloGroupName} is not found in self.info['Bolometer Groups']")
+            logger.debug(
+                f"{boloGroupName} is not found in self.info['Bolometer Groups']"
+            )
             return None
 
         # --- Loop over each bolometer, only plot add with the correct group name
@@ -795,10 +807,10 @@ class Tokamak(object):
                                  field line start location in degrees
         """
         if self.wall is None:
-            print("No wall information loaded, cannot continue!")
+            logger.error("No wall information loaded, cannot continue!")
             return
         if self.info is None:
-            print("No tokamak information loaded, cannot continue!")
+            logger.error("No tokamak information loaded, cannot continue!")
             return
 
         fig = plt.figure()
@@ -818,7 +830,7 @@ class Tokamak(object):
         if hasattr(self, "bolometers"):
 
             if self.info["mode"] != "Build":
-                print(
+                logger.debug(
                     f"→ Building the tokamak! We need this to trace the chords for the bolometers"
                 )
                 self._build_tokamak()
@@ -852,8 +864,8 @@ class Tokamak(object):
                 for bolo in self.bolometers:
                     bolo._change_parent(value=self.world)
             except Exception as e:
-                print(f"Could not plot the bolometer chords, error: {e}")
-                print(
+                logger.error(f"Could not plot the bolometer chords, error: {e}")
+                logger.debug(
                     f"Ensure that the tokamak is built before plotting the bolometers, currently in mode: {self.info['mode']}"
                 )
 
@@ -875,8 +887,12 @@ class Tokamak(object):
                     )
 
             else:
-                print(f"Input fieldLinePhi of {fieldLineStartPhi}, not availble!")
-                print(f"Possible fieldLinePhi(s): {self.get_fieldLines_startPhis()}")
+                logger.debug(
+                    f"Input fieldLinePhi of {fieldLineStartPhi}, not availble!"
+                )
+                logger.debug(
+                    f"Possible fieldLinePhi(s): {self.get_fieldLines_startPhis()}"
+                )
 
             ax.legend()
 
@@ -914,7 +930,7 @@ class Tokamak(object):
         """
 
         startPhideg = f"{int(np.rad2deg(startPhi))}"
-        # --- Initilize the arrays
+        # --- Initialize the arrays
         if not hasattr(self, "fieldLines"):
             self.fieldLines = {}
         self.fieldLines[startPhideg] = {}
@@ -931,7 +947,7 @@ class Tokamak(object):
             # --- Loop over the R, z coordinates, store the result
             for jj in range(len(startR)):
                 if self.verbose:
-                    print(
+                    logger.debug(
                         f"Calculating fields in the {direction_prefix} direction from\tR={startR[jj]:.2f}m, z={startZ[jj]:.2f}m"
                     )
                 tracer = Fieldline_Tracer(
@@ -950,7 +966,7 @@ class Tokamak(object):
                     d_["x"], d_["y"], d_["z"], d_["phi"], d_["R"], d_["L"]
                 )
 
-                # --- Initilize the arrays
+                # --- Initialize the arrays
                 for kk in range(int(numTransists)):
                     direction = f"{direction_prefix}_rev{kk}"
 
@@ -969,7 +985,15 @@ class Tokamak(object):
                         ].flatten()
                     # --- Phi should be the same for each one of them, so we only need to store it once
                     if jj == 0:
-                        self.fieldLines[startPhideg][direction]["phi"] = rev[kk]["phi"]
+                        phi_arr = rev[kk]["phi"]
+                        self.fieldLines[startPhideg][direction]["phi"] = phi_arr
+                        # Pre-compute and cache the sort index so find_RZ_Fline
+                        # doesn't recompute it on every emissivity evaluation call.
+                        sidx = phi_arr.argsort()
+                        self.fieldLines[startPhideg][direction]["phi_sidx"] = sidx
+                        self.fieldLines[startPhideg][direction]["phi_sorted"] = phi_arr[
+                            sidx
+                        ]
 
     def get_fieldLines_startPhis(self) -> list:
         return list(self.fieldLines.keys())
@@ -982,21 +1006,23 @@ class Tokamak(object):
 
         Method based on Divakr's answer here, this should be faster than the simple np.abs(x - x0).argmin():
         https://stackoverflow.com/questions/45349561/find-nearest-indices-for-one-array-against-all-values-in-another-array-python
-        """
 
-        B = np.array(self.fieldLines[startPhi][emissionName]["phi"])
+        The sort index is pre-computed in set_fieldlines() and cached, so this
+        method only pays the searchsorted cost on each call.
+        """
+        fline = self.fieldLines[startPhi][emissionName]
+        sidx_B = fline["phi_sidx"]
+        sorted_B = fline["phi_sorted"]
         A = np.array(inputPhis)
-        L = np.array(B).size
-        sidx_B = B.argsort()
-        sorted_B = B[sidx_B]
+        L = sorted_B.size
         sorted_idx = np.searchsorted(sorted_B, A)
         sorted_idx[sorted_idx == L] = L - 1
         mask = (sorted_idx > 0) & (
             (np.abs(A - sorted_B[sorted_idx - 1]) < np.abs(A - sorted_B[sorted_idx]))
         )
         flInd = sidx_B[sorted_idx - mask]
-        R = self.fieldLines[startPhi][emissionName]["R"][:, flInd]
-        z = self.fieldLines[startPhi][emissionName]["z"][:, flInd]
+        R = fline["R"][:, flInd]
+        z = fline["z"][:, flInd]
         return R, z
 
     def create_cameras(self, dtheta=10, dtheta_camera=4.9, phi=0):
@@ -1080,12 +1106,12 @@ class Tokamak(object):
             self.cameras[ii]["theta"] = line
             # r, z = Util_D3D.find_intersection(lines[line], tok_r, tok_z)
             # cameras[ii]["detector_center"] = Point3D(r, 0.0, z)
-            r, z = find_intersection(lines_upper[line], tok_r, tok_z)
-            x, y, z = rz_to_xyz(r, z, phi)
+            r, z = find_intersection(lines_upper[line], tok_r, tok_z)  # type: ignore
+            x, y, z = rz_to_xyz(r, z, phi)  # type: ignore
             self.cameras[ii]["p1"] = Point3D(x, y, z)
 
-            r, z = find_intersection(lines_lower[line], tok_r, tok_z)
-            x, y, z = rz_to_xyz(r, z, phi)
+            r, z = find_intersection(lines_lower[line], tok_r, tok_z)  # type: ignore
+            x, y, z = rz_to_xyz(r, z, phi)  # type: ignore
             self.cameras[ii]["p2"] = Point3D(x, y, z)
 
             self.cameras[ii]["y_vector_full"] = self.cameras[ii]["p1"].vector_to(
@@ -1182,7 +1208,7 @@ class Tokamak(object):
 
         if WithWallCAD:
             # load CAD from inputs directory
-            print(
+            logger.debug(
                 "This function is only set up for DIII-D so far, it's loading the DIII-D CAD"
             )
             pfcs = import_stl(self.input_dir / "CAD_stl_files" / "d3d_CAD_full.stl")
@@ -1277,9 +1303,9 @@ class Tokamak(object):
         plt.ion()
         p = 1
         while not camera.render_complete:
-            print("Rendering pass {}...".format(p))
+            logger.debug("Rendering pass {}...".format(p))
             camera.observe()
-            print()
+            logger.debug("")
             p += 1
             stopRender = input("Stop? (y to stop)")
             if stopRender == "y":

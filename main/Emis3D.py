@@ -74,7 +74,9 @@ BUG:
 """
 
 import os
+import logging
 import time
+import warnings
 
 import dill
 import numpy as np
@@ -83,6 +85,8 @@ from lmfit import minimize, report_fit
 from scipy.integrate import simpson
 
 import main.Util_emis3D as Util_emis3D
+
+logger = logging.getLogger(__name__)
 from main.Globals import EMIS3D_INPUTS_DIRECTORY
 from main.Tokamak import Tokamak
 from main.Util import (
@@ -120,7 +124,10 @@ class Emis3D:
         self.data = {}
         self.info = None
         self.verbose = verbose
-        self.error_free = True
+
+        # Configure logging level for the whole 'main' package
+        if verbose:
+            logging.getLogger("main").setLevel(logging.DEBUG)
 
         if initialize:
             self._initialize(tokamakName=tokamakName, runConfigName=runConfigName)
@@ -133,13 +140,10 @@ class Emis3D:
         self, tokamakName: str | None = None, runConfigName: str | None = None
     ) -> None:
         """Load configuration, bolometer data and radDists."""
-        if not self.error_free:
-            print("An error occurred, cannot run the program")
-            return
-
         if tokamakName is None or runConfigName is None:
-            print("tokamakName or runConfigName is None, cannot run the program")
-            return
+            raise ValueError(
+                "tokamakName and runConfigName are required to initialise Emis3D"
+            )
 
         Util_emis3D.print_intro()
         self._load_config_file(tokamakName=tokamakName, runConfigName=runConfigName)
@@ -157,15 +161,13 @@ class Emis3D:
         crossCalib : Flag to tell the program to find the calibration
                      factor between bolometers during the CQ
         """
-        if self.error_free:
-            self._prepare_fits(evalTime=evalTime, crossCalib=crossCalib)
-            t_start = time.time()
-
-            self._minimize_radDists(evalTime=evalTime)
-            print(f"→ Fitting done in {time.time() - t_start:.2f} seconds")
-            self._post_process_fit_arrangement(evalTime=evalTime)
-            self._post_process_radiation_distribution(evalTime=evalTime)
-            self._post_process_calculations(evalTime=evalTime)
+        self._prepare_fits(evalTime=evalTime, crossCalib=crossCalib)
+        t_start = time.time()
+        self._minimize_radDists(evalTime=evalTime)
+        logger.info("Fitting done in %.2f seconds", time.time() - t_start)
+        self._post_process_fit_arrangement(evalTime=evalTime)
+        self._post_process_radiation_distribution(evalTime=evalTime)
+        self._post_process_calculations(evalTime=evalTime)
 
     # ------------------------------------------------------------------
     # Configuration / data loading
@@ -185,41 +187,27 @@ class Emis3D:
         automatically.
         """
 
-        # --- Only run if error free
-        if not self.error_free:
-            return
-
-        try:
-            if pathFileName is None:
-                if tokamakName is not None and runConfigName is not None:
-                    pathFileName = str(
-                        EMIS3D_INPUTS_DIRECTORY / tokamakName / "runs" / runConfigName
-                    )
-                else:
-                    raise Exception(
-                        "tokamakName, runConfigName, or pathFileName is None; "
-                        "cannot load config file"
-                    )
-
-            # --- Load the configuration file, if it exists
-            if not os.path.isfile(str(pathFileName)):
-                raise Exception(f"File does not exist: {pathFileName}")
-
-            self.info = config_loader(str(pathFileName), verbose=self.verbose)
-
-            # --- Raise exception if the file failed to load
-            if self.info is None:
-                raise Exception(
-                    f"Could not load the configuration file: {pathFileName}"
+        if pathFileName is None:
+            if tokamakName is not None and runConfigName is not None:
+                pathFileName = str(
+                    EMIS3D_INPUTS_DIRECTORY / tokamakName / "runs" / runConfigName
+                )
+            else:
+                raise ValueError(
+                    "tokamakName, runConfigName, or pathFileName is None; "
+                    "cannot load config file"
                 )
 
-            # --- Store the tokamak and runConfig name
-            self.info["tokamakName"] = tokamakName
-            self.info["runConfigName"] = runConfigName
+        if not os.path.isfile(str(pathFileName)):
+            raise FileNotFoundError(f"Config file not found: {pathFileName}")
 
-        except Exception as e:
-            print(f"An error occurred loading the config file:\n{e}")
-            self.error_free = False
+        self.info = config_loader(str(pathFileName), verbose=self.verbose)
+
+        if self.info is None:
+            raise RuntimeError(f"Could not load the configuration file: {pathFileName}")
+
+        self.info["tokamakName"] = tokamakName
+        self.info["runConfigName"] = runConfigName
 
     def _load_radDists(self) -> None:
         """
@@ -227,80 +215,58 @@ class Emis3D:
         radDistDirectories_LocIndependent, and radDistDirectories_LocDependent
         """
 
-        # --- Only continue if error free
-        if not self.error_free:
-            return
+        if self.verbose:
+            logger.debug("Loading radDists")
+
+        # --- Initialise synthetic signal arrays
+        self.data.update({"synthetic": {"locDependent": {}, "locIndependent": {}}})
+        self.files = []
+
+        if self.info is None or (
+            "radDistDirectories_LocIndependent" not in self.info
+            and "radDistDirectories_LocDependent" not in self.info
+        ):
+            raise RuntimeError("No radDistDirectories found in the config file")
+
+        # --- Load location independent radDists
+        count_ = 0
+        for dir_ in self.info["radDistDirectories_LocIndependent"]:
+            pathFileName = os.path.join(
+                EMIS3D_INPUTS_DIRECTORY,
+                self.info["tokamakName"],
+                "radDists",
+                dir_,
+            )
+            for file_ in get_filenames_in_directory(pathFileName):
+                try:
+                    temp_ = RadDistFitting(radDistPath=file_)
+                    self.data["synthetic"]["locIndependent"][count_] = temp_
+                    count_ += 1
+                except Exception as e:
+                    warnings.warn(f"Skipping radDist {file_}: {e}", stacklevel=2)
+                    logger.warning("Skipping radDist %s: %s", file_, e)
+
+        # --- Load location dependent radDists
+        for ii, dir_ in enumerate(self.info["radDistDirectories_LocDependent"]):
+            self.data["synthetic"]["locDependent"][f"loc_{ii}"] = {}
+            pathFileName = os.path.join(
+                EMIS3D_INPUTS_DIRECTORY,
+                self.info["tokamakName"],
+                "radDists",
+                dir_,
+            )
+            count_ = 0
+            for file_ in get_filenames_in_directory(pathFileName):
+                try:
+                    temp_ = RadDistFitting(radDistPath=file_)
+                    self.data["synthetic"]["locDependent"][f"loc_{ii}"][count_] = temp_
+                    count_ += 1
+                except Exception as e:
+                    warnings.warn(f"Skipping radDist {file_}: {e}", stacklevel=2)
+                    logger.warning("Skipping radDist %s: %s", file_, e)
 
         if self.verbose:
-            print("→ Loading radDists")
-
-        try:
-            # --- Initilize synthetic signal arrays
-            self.data.update({"synthetic": {"locDependent": {}, "locIndependent": {}}})
-
-            # --- Find the files, store as a nested list
-            self.files = []
-
-            if self.info is None or (
-                "radDistDirectories_LocIndependent" not in self.info
-                and "radDistDirectories_LocDependent" not in self.info
-            ):
-                print("No radDistDirectories found in the config file")
-                return
-
-            # --- Load location independent radDists
-            dirs_ = self.info["radDistDirectories_LocIndependent"]
-            count_ = 0
-
-            for dir_ in dirs_:
-                pathFileName = os.path.join(
-                    EMIS3D_INPUTS_DIRECTORY,
-                    self.info["tokamakName"],
-                    "radDists",
-                    dir_,
-                )
-
-                # --- Loop over the files and load the radDist
-                for file_ in get_filenames_in_directory(pathFileName):
-                    try:
-
-                        temp_ = RadDistFitting(radDistPath=file_)
-                        self.data["synthetic"]["locIndependent"][count_] = temp_
-                        count_ += 1
-                    except Exception as e:
-                        print(f"Error loading radDist {file_}: {e}")
-
-            # --- Load radDists that are location independent
-            dirs_ = self.info["radDistDirectories_LocDependent"]
-
-            for ii, dir_ in enumerate(dirs_):
-                self.data["synthetic"]["locDependent"][f"loc_{ii}"] = {}
-
-                pathFileName = os.path.join(
-                    EMIS3D_INPUTS_DIRECTORY,
-                    self.info["tokamakName"],
-                    "radDists",
-                    dir_,
-                )
-
-                # --- Loop over the files and load the radDist
-                count_ = 0
-                for file_ in get_filenames_in_directory(pathFileName):
-                    try:
-                        temp_ = RadDistFitting(radDistPath=file_)
-                        self.data["synthetic"]["locDependent"][f"loc_{ii}"][
-                            count_
-                        ] = temp_
-                        count_ += 1
-                    except Exception as e:
-                        print(f"Error loading radDist {file_}: {e}")
-
-            if self.verbose:
-                print("→ Done loading radDists")
-
-        except Exception as e:
-            print(f"An error occured while loading synthetic data: {e}")
-            self.error_free = False
+            logger.debug("Done loading radDists")
 
     def _load_bolometer_data(self) -> None:
         """
@@ -308,47 +274,34 @@ class Emis3D:
         The filename is taken from ``dataFileName`` in the run config.
         """
 
-        # --- Only run if error free
-        if not self.error_free:
-            return
+        if self.info is None or "BOLOMETERS" not in self.info:
+            raise RuntimeError("No BOLOMETERS found in the config file")
 
-        try:
-            # --- Exit if there is no config file loaded
-            if self.info is None or "BOLOMETERS" not in self.info:
-                raise Exception("No BOLOMETERS found in the config file")
-
-            # --- Load the data
-            self.data["observed"] = {}
-            for bolo_ in self.info["BOLOMETERS"]:
-                pathFileName = os.path.join(
-                    EMIS3D_INPUTS_DIRECTORY,
-                    self.info["tokamakName"],
-                    "sxrData",
-                    self.info["BOLOMETERS"][bolo_]["dataFileName"],
-                )
-                if not os.path.isfile(pathFileName):
-                    raise FileNotFoundError(f"File does not exist: {pathFileName}")
-
-                if self.verbose:
-                    print(f"→ Loading bolometer data: {pathFileName}")
-
-                temp_ = read_h5(pathFileName)
-
-                # --- Decode channel names from bytes
-                for ii, ch_ in enumerate(temp_["channelOrder"]):
-                    temp_["channelOrder"][ii] = ch_.decode("utf-8")
-
-                # --- Apply optional scaling factor
-                temp_["DATA_CALIBRATED"] *= self.info["BOLOMETERS"][bolo_].get(
-                    "scalingFactor", 1.0
+        self.data["observed"] = {}
+        for bolo_ in self.info["BOLOMETERS"]:
+            pathFileName = os.path.join(
+                EMIS3D_INPUTS_DIRECTORY,
+                self.info["tokamakName"],
+                "sxrData",
+                self.info["BOLOMETERS"][bolo_]["dataFileName"],
+            )
+            if not os.path.isfile(pathFileName):
+                raise FileNotFoundError(
+                    f"Bolometer data file not found: {pathFileName}"
                 )
 
-                # --- Store the data
-                self.data["observed"][bolo_] = temp_
+            logger.debug("Loading bolometer data: %s", pathFileName)
 
-        except Exception as e:
-            print(f"An error occurred loading the bolometer data:\n{e}")
-            self.error_free = False
+            temp_ = read_h5(pathFileName)
+
+            for ii, ch_ in enumerate(temp_["channelOrder"]):
+                temp_["channelOrder"][ii] = ch_.decode("utf-8")
+
+            temp_["DATA_CALIBRATED"] *= self.info["BOLOMETERS"][bolo_].get(
+                "scalingFactor", 1.0
+            )
+
+            self.data["observed"][bolo_] = temp_
 
     def _create_master_channel_order(self) -> None:
         """
@@ -359,37 +312,19 @@ class Emis3D:
         [[bolo1_1, bolo1_2, ...], [bolo2_1, bolo2_2, ...], ...]
         """
 
-        # --- Only run if error free
-        if not self.error_free:
-            return
+        if self.info is None or "BOLOMETERS" not in self.info:
+            raise RuntimeError("No BOLOMETERS found in the config file")
 
-        try:
-            if self.info is None or "BOLOMETERS" not in self.info:
-                raise Exception("No BOLOMETERS found in the config file")
+        self.channel_order = {
+            "bolometer_order": [],
+            "channel_list": [],
+        }
 
-            # --- Initilize the arrays
-            self.channel_order = {
-                "bolometer_order": [],
-                "channel_list": [],
-            }
-
-            for bolo in self.data["observed"]:
-                self.channel_order["bolometer_order"].append(bolo)
-                self.channel_order["channel_list"].append(
-                    list(self.data["observed"][bolo]["channelOrder"])
-                )
-
-                """
-                # OLD:
-                temp_ = []
-                for channel in self.data["observed"][bolo]["channelOrder"]:
-                    temp_.append(channel)
-                self.channel_order["channel_list"].append(temp_)
-                """
-
-        except Exception as e:
-            print(f"An error occurred creating the master channel order:\n{e}")
-            self.error_free = False
+        for bolo in self.data["observed"]:
+            self.channel_order["bolometer_order"].append(bolo)
+            self.channel_order["channel_list"].append(
+                list(self.data["observed"][bolo]["channelOrder"])
+            )
 
     # ------------------------------------------------------------------
     # Fit preparation
@@ -438,160 +373,134 @@ class Emis3D:
         self.fitData[evalTime]['observed_error'] : Error estimates
         """
 
-        # --- Only run if error free
-        if not self.error_free:
-            return
+        if not hasattr(self, "fitData"):
+            self.fitData = {}
 
-        try:
-            if not hasattr(self, "fitData"):
-                self.fitData = {}
+        # NOTE:
+        """
+        - Observed is what is used in the minimization process, it is a set of
+          nested list, the same way that self.channel_order['channel_list'] is organized
+        - Bolo data is organzied to make plotting easier since it is a dict of each bolometer.
+        """
 
-            # NOTE:
+        self.fitData[evalTime] = {
+            "observed": [],
+            "observed_error": [],
+            "boloData": {},
+            "boloData_error": {},
+        }
+
+        # --- Average and map the data to a dict
+        data_ = {}
+        for bolo_ in self.data["observed"]:
+            temp = self._average_observed_data(arrayName=bolo_, evalTime=evalTime)
+            data_.update(dict(zip(self.data["observed"][bolo_]["channelOrder"], temp)))
+
+        self.fitData[evalTime]["dataMap"] = data_
+
+        # --- Find the max value in all the channels
+        max_ = max(
+            (data_[ch] for bolo_ in self.channel_order["channel_list"] for ch in bolo_),
+            default=0.0,
+        )
+
+        for ii, bolo_chans in enumerate(self.channel_order["channel_list"]):
+            temp = []
+            temp_e = []
+
+            # --- Find the max value for that specific array
             """
-            - Observed is what is used in the minimization process, it is a set of
-              nested list, the same way that self.channel_order['channel_list'] is organized
-            - Bolo data is organzied to make plotting easier since it is a dict of each bolometer.
+            max_ = 0
+            for channel in channels:
+                if data_[channel] > max_:
+                    max_ = data_[channel]
             """
 
-            self.fitData[evalTime] = {
-                "observed": [],
-                "observed_error": [],
-                "boloData": {},
-                "boloData_error": {},
-            }
+            for channel in bolo_chans:
+                val = data_[channel]
+                temp.append(val)
 
-            # --- Average and map the data to a dict
-            data_ = {}
-            for bolo_ in self.data["observed"]:
-                temp = self._average_observed_data(arrayName=bolo_, evalTime=evalTime)
-                data_.update(
-                    dict(zip(self.data["observed"][bolo_]["channelOrder"], temp))
-                )
+                # --- Large error for zero signal
+                if val > 1.0:
+                    err_frac = Util_emis3D.error_exponential(
+                        val, max_, scale_factor=1.0
+                    )
+                    err_ = val * err_frac
+                else:
+                    err_ = np.float64(1.0e4)
 
-            self.fitData[evalTime]["dataMap"] = data_
+                temp_e.append(err_)
 
-            # --- Find the max value in all the channels
-            max_ = max(
-                (
-                    data_[ch]
-                    for bolo_ in self.channel_order["channel_list"]
-                    for ch in bolo_
-                ),
-                default=0.0,
-            )
+            self.fitData[evalTime]["observed"].append(temp)
+            self.fitData[evalTime]["observed_error"].append(temp_e)
 
-            for ii, bolo_chans in enumerate(self.channel_order["channel_list"]):
-                temp = []
-                temp_e = []
+            # --- Temp is a nested list of bolometers [[Bolo1-1, Bolo1-2, ...], [Bolo2-1, Bolo2-2], etc.]
+            bolo_name = self.channel_order["bolometer_order"][ii]
+            self.fitData[evalTime]["boloData"][bolo_name] = temp
+            self.fitData[evalTime]["boloData_error"][bolo_name] = temp_e
 
-                # --- Find the max value for that specific array
-                """
-                max_ = 0
-                for channel in channels:
-                    if data_[channel] > max_:
-                        max_ = data_[channel]
-                """
-
-                for channel in bolo_chans:
-                    val = data_[channel]
-                    temp.append(val)
-
-                    # --- Large error for zero signal
-                    if val > 1.0:
-                        err_frac = Util_emis3D.error_exponential(
-                            val, max_, scale_factor=1.0
-                        )
-                        err_ = val * err_frac
-                    else:
-                        err_ = np.float64(1.0e4)
-
-                    temp_e.append(err_)
-
-                self.fitData[evalTime]["observed"].append(temp)
-                self.fitData[evalTime]["observed_error"].append(temp_e)
-
-                # --- Temp is a nested list of bolometers [[Bolo1-1, Bolo1-2, ...], [Bolo2-1, Bolo2-2], etc.]
-                bolo_name = self.channel_order["bolometer_order"][ii]
-                self.fitData[evalTime]["boloData"][bolo_name] = temp
-                self.fitData[evalTime]["boloData_error"][bolo_name] = temp_e
-
-            if self.verbose:
-                print("→ Observed data prepared for fitting")
-
-        except Exception as e:
-            print(f"An error occured while preparing data for the fit: {e}")
-            self.error_free = False
+        if self.verbose:
+            logger.debug("→ Observed data prepared for fitting")
 
     def _prepare_synthetic_for_fits(
         self, evalTime: float, crossCalib: bool = False
     ) -> None:
         """Prepare and parameterise every radDist for the minimisation."""
 
-        # --- Only run if error free
-        if not self.error_free:
-            return
-
         print_minor_error = True
 
         def print_error(radD):
-            print("")
-            print("-" * 10 + "MINOR ERROR" + "-" * 10)
-            print(
+            logger.info("")
+            logger.warning("-" * 10 + "MINOR ERROR" + "-" * 10)
+            logger.warning(
                 f"Channels: {radD.info['ERROR CHANNELS']}were not found in the radDist, they will be ignored"
             )
-            print("-" * 31)
-            print("")
+            logger.debug("-" * 31)
+            logger.info("")
 
-        try:
-            print("→ Preparing synthetic data for fitting")
+        logger.debug("→ Preparing synthetic data for fitting")
 
-            # --- Scale the synthetic data to observed for better fitting
-            max_data_val = find_max_nested_lists(self.fitData[evalTime]["observed"])
+        # --- Scale the synthetic data to observed for better fitting
+        max_data_val = find_max_nested_lists(self.fitData[evalTime]["observed"])
 
-            if self.info is not None and "varyScaleFactor" in self.info:
+        if self.info is not None and "varyScaleFactor" in self.info:
 
-                boloNames = (
-                    self.channel_order["bolometer_order"] if crossCalib else None
-                )
+            boloNames = self.channel_order["bolometer_order"] if crossCalib else None
 
-                # --- Arrange and create parameters for the location dependent data
-                for loc in self.data["synthetic"]["locDependent"]:
-                    for number_ in self.data["synthetic"]["locDependent"][loc]:
-                        radD = self.data["synthetic"]["locDependent"][loc][number_]
-                        radD.prepare_for_fits(
-                            self.channel_order["channel_list"],
-                            data_max=max_data_val,
-                        )
-
-                        radD.create_parameters(
-                            boloNames=boloNames,
-                            varyScaleFactor=self.info["varyScaleFactor"],
-                        )
-                        if "ERROR CHANNELS" in radD.info and print_minor_error:
-                            print_error(radD)
-                            print_minor_error = False
-
-                # --- Arrange and create parameters for the location independent data
-                for number_ in self.data["synthetic"]["locIndependent"]:
-                    radD = self.data["synthetic"]["locIndependent"][number_]
+            # --- Arrange and create parameters for the location dependent data
+            for loc in self.data["synthetic"]["locDependent"]:
+                for number_ in self.data["synthetic"]["locDependent"][loc]:
+                    radD = self.data["synthetic"]["locDependent"][loc][number_]
                     radD.prepare_for_fits(
-                        self.channel_order["channel_list"], data_max=max_data_val
+                        self.channel_order["channel_list"],
+                        data_max=max_data_val,
                     )
+
                     radD.create_parameters(
                         boloNames=boloNames,
                         varyScaleFactor=self.info["varyScaleFactor"],
                     )
-
                     if "ERROR CHANNELS" in radD.info and print_minor_error:
                         print_error(radD)
                         print_minor_error = False
 
-            if self.verbose:
-                print("→ Done preparing synthetic data for fit")
+            # --- Arrange and create parameters for the location independent data
+            for number_ in self.data["synthetic"]["locIndependent"]:
+                radD = self.data["synthetic"]["locIndependent"][number_]
+                radD.prepare_for_fits(
+                    self.channel_order["channel_list"], data_max=max_data_val
+                )
+                radD.create_parameters(
+                    boloNames=boloNames,
+                    varyScaleFactor=self.info["varyScaleFactor"],
+                )
 
-        except Exception as e:
-            print(f"An error occured while preparing synthetic data for fitting: {e}")
-            self.error_free = False
+                if "ERROR CHANNELS" in radD.info and print_minor_error:
+                    print_error(radD)
+                    print_minor_error = False
+
+        if self.verbose:
+            logger.debug("→ Done preparing synthetic data for fit")
 
     def _build_synthetic_dict(
         self, radDist_, locDependence: str, number, location=None
@@ -632,74 +541,66 @@ class Emis3D:
         Organise data and synthetic signals into self.fits[evalTime] in
         preparation for _minimize_radDists.
         """
-        # --- Only run if error free
-        if not self.error_free:
-            return
 
-        try:
-            if self.verbose:
-                print("→ Preparing data for fitting")
+        if self.verbose:
+            logger.debug("→ Preparing data for fitting")
 
-            self._prepare_data_for_fit(evalTime=evalTime)
-            self._prepare_synthetic_for_fits(evalTime=evalTime, crossCalib=crossCalib)
+        self._prepare_data_for_fit(evalTime=evalTime)
+        self._prepare_synthetic_for_fits(evalTime=evalTime, crossCalib=crossCalib)
 
-            if self.verbose:
-                print("→ Arranging radDists for fitting")
+        if self.verbose:
+            logger.debug("→ Arranging radDists for fitting")
 
-            if not hasattr(self, "fits"):
-                self.fits = {}
+        if not hasattr(self, "fits"):
+            self.fits = {}
 
-            # --- Initilze the fitting dictionary
-            self.fits[evalTime] = {}
-            fitCount = -1
+        # --- Initialize the fitting dictionary
+        self.fits[evalTime] = {}
+        fitCount = -1
 
-            # --- Location-independent radDists
-            for number in self.data["synthetic"]["locIndependent"]:
+        # --- Location-independent radDists
+        for number in self.data["synthetic"]["locIndependent"]:
+            fitCount += 1
+            radDist_ = self.data["synthetic"]["locIndependent"][number]
+
+            self.fits[evalTime][fitCount] = {
+                "info": {
+                    "radDists": {
+                        "locationdependence": "locIndependent",
+                        "radDistNumber": number,
+                        "location": None,
+                    }
+                },
+                "parameters": radDist_.fitSynthetic["params"]["params"],
+                "synthetic_dict": self._build_synthetic_dict(
+                    radDist_, "locIndependent", number
+                ),
+            }
+
+        # --- Location-dependent radDists
+        for loc_ in self.data["synthetic"]["locDependent"]:
+            for number in self.data["synthetic"]["locDependent"][loc_]:
                 fitCount += 1
-                radDist_ = self.data["synthetic"]["locIndependent"][number]
+                radDist_ = self.data["synthetic"]["locDependent"][loc_][number]
 
                 self.fits[evalTime][fitCount] = {
                     "info": {
                         "radDists": {
-                            "locationdependence": "locIndependent",
+                            "locationdependence": "locDependent",
                             "radDistNumber": number,
-                            "location": None,
+                            "location": loc_,
                         }
                     },
                     "parameters": radDist_.fitSynthetic["params"]["params"],
                     "synthetic_dict": self._build_synthetic_dict(
-                        radDist_, "locIndependent", number
+                        radDist_, "locDependent", number, location=loc_
                     ),
                 }
 
-            # --- Location-dependent radDists
-            for loc_ in self.data["synthetic"]["locDependent"]:
-                for number in self.data["synthetic"]["locDependent"][loc_]:
-                    fitCount += 1
-                    radDist_ = self.data["synthetic"]["locDependent"][loc_][number]
-
-                    self.fits[evalTime][fitCount] = {
-                        "info": {
-                            "radDists": {
-                                "locationdependence": "locDependent",
-                                "radDistNumber": number,
-                                "location": loc_,
-                            }
-                        },
-                        "parameters": radDist_.fitSynthetic["params"]["params"],
-                        "synthetic_dict": self._build_synthetic_dict(
-                            radDist_, "locDependent", number, location=loc_
-                        ),
-                    }
-
-            num_fits = len(self.fits[evalTime])
-            if self.info is not None:
-                self.info["numFits"] = num_fits
-            self.fits[evalTime]["chiSqVec"] = np.full(num_fits, 1.0e19)
-
-        except Exception as e:
-            print(f"An error occured while preparing the fits: {e}")
-            self.error_free = False
+        num_fits = len(self.fits[evalTime])
+        if self.info is not None:
+            self.info["numFits"] = num_fits
+        self.fits[evalTime]["chiSqVec"] = np.full(num_fits, 1.0e19)
 
     # ------------------------------------------------------------------
     # Minimization
@@ -710,10 +611,6 @@ class Emis3D:
         Run leastsq minimization for every fit candidate stored in
         self.fits[evalTime].
         """
-
-        # --- Only run if error free
-        if not self.error_free:
-            return
 
         try:
             if self.info is None or "scale_def" not in self.info:
@@ -728,7 +625,7 @@ class Emis3D:
                     continue
 
                 if ii % 1_000 == 0 and self.verbose:
-                    print(f"→ Preforming fit {ii} out of {self.info['numFits']}")
+                    logger.debug(f"→ Preforming fit {ii} out of {self.info['numFits']}")
 
                 synth_dict = self.fits[evalTime][ii]["synthetic_dict"]
                 pars = self.fits[evalTime][ii]["parameters"]
@@ -759,11 +656,11 @@ class Emis3D:
                         "fit"
                     ].redchi
                 except Exception as e:
-                    print(f"An error occured during the {ii} iteration: {e}")
+                    logger.warning(f"An error occurred during the {ii} iteration: {e}")
                     self.fits[evalTime]["chiSqVec"][ii] = 1.0e19
 
         except Exception as e:
-            print(f"An error occured while fitting: {e}")
+            logger.warning(f"An error occurred while fitting: {e}")
 
     # ------------------------------------------------------------------
     # Post-processing
@@ -806,7 +703,7 @@ class Emis3D:
         elif info["distType"].lower() == "helicalring":
             radDist_ = HelicalRing(config=rad_.info)
         else:
-            print(
+            logger.info(
                 f"_rebuild_radDist() only supports Helical, ElongatedRing, or HelicalRing"
             )
             return None
@@ -841,9 +738,9 @@ class Emis3D:
         bestFitID = np.array(self.fits[evalTime]["chiSqVec"]).argmin().item()
 
         # --- Print the results of the best fit
-        print("")
+        logger.info("")
         report_fit(self.fits[evalTime][bestFitID]["fit"])
-        print("")
+        logger.info("")
 
         # --- Store the best fit
         if not hasattr(self, "bestFits"):
@@ -853,7 +750,7 @@ class Emis3D:
         self.bestFits[evalTime]["bestFitID"] = bestFitID
 
         if self.info is None or "scale_def" not in self.info:
-            print("No scale_def found in the config file")
+            logger.info("No scale_def found in the config file")
             return
 
         boloNames = None
@@ -1031,7 +928,7 @@ class Emis3D:
 
         # --- Only run if self._post_process_fit_arrangement() has been run
         if not hasattr(self, "bestFits"):
-            print(
+            logger.info(
                 "Please run self._post_process_fit_arrangement() before "
                 "self._post_process_calculations()"
             )
@@ -1212,7 +1109,7 @@ class Emis3D:
         """Delete non-best-fit entries from self.fits to reclaim memory."""
 
         if self.verbose:
-            print(f"→ Deleting bad fits for = {evalTime:.4f} ms")
+            logger.debug(f"→ Deleting bad fits for = {evalTime:.4f} ms")
 
         # --- Delete the bad fits to save memory
         if hasattr(self, "fits") and evalTime in self.fits:
@@ -1254,7 +1151,7 @@ class Emis3D:
         save_results(
             pathFileName, {"fit_data": self.fitData, "bestFits": self.bestFits}
         )
-        print(f"→ Best fits and fitData saved to: {pathFileName}")
+        logger.debug(f"→ Best fits and fitData saved to: {pathFileName}")
 
     def _load_bestFits(self, path: str = "") -> None:
         """Load bestFits and fitData from a previously saved dill file."""
@@ -1281,14 +1178,14 @@ class Emis3D:
 
     def _plot_bestFit(self, evalTime: float, save: bool = False) -> None:
         """Plots the fit synthetic signal, data, and radDist for the given evalTime."""
-        print(f"→ Plotting the best fit")
+        logger.debug(f"→ Plotting the best fit")
 
         if self.info is None:
             return
 
         # --- Rebuild the bestFit radDist
         if not hasattr(self, "bestFits"):
-            print(
+            logger.info(
                 "Please run _post_process_fit_arrangement() and "
                 "_post_process_calculations() before _plot_bestFit()"
             )
@@ -1436,7 +1333,7 @@ class Emis3D:
                 os.makedirs(img_dir, exist_ok=True)
                 out_path = img_dir / filename
                 plt.savefig(out_path, dpi=100, format="png")
-                print(f"→ Figure saved to {out_path}")
+                logger.debug(f"→ Figure saved to {out_path}")
 
         else:
             plt.show()

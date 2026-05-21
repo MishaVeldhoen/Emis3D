@@ -8,11 +8,15 @@ mu is the injection location
 Written by JLH Aug. 2025
 """
 
+import logging
+
 import numpy as np
 
 from main.Util import convert_arrays_to_list
 from scipy.special import i0
 from lmfit import minimize
+
+logger = logging.getLogger(__name__)
 
 
 def _exp(dphi: np.ndarray, kappa: float = 0.0) -> np.ndarray:
@@ -120,8 +124,8 @@ def find_dphi(
     """
 
     if emissionName is None:
-        print(
-            f"Emission name in Util_emis3D.find_dphi is None. This should not happen..."
+        logger.warning(
+            "Emission name in Util_emis3D.find_dphi is None. This should not happen..."
         )
         return
 
@@ -322,8 +326,7 @@ def error_inv_sqrt(
 
 def print_intro() -> None:
 
-    print(
-        """
+    print("""
 
     ███████╗███╗   ███╗██╗███████╗██████╗ ██████╗ 
     ██╔════╝████╗ ████║██║██╔════╝╚════██╗██╔══██╗
@@ -331,5 +334,4 @@ def print_intro() -> None:
     ██╔══╝  ██║╚██╔╝██║██║╚════██║ ╚═══██╗██║  ██║
     ███████╗██║ ╚═╝ ██║██║███████║██████╔╝██████╔╝
     ╚══════╝╚═╝     ╚═╝╚═╝╚══════╝╚═════╝ ╚═════╝
-    """
-    )
+    """)

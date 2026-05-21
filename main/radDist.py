@@ -12,11 +12,15 @@ TODO: Update powerPerBin and uncomment it from the self.build()
 
 """
 
+import logging
+
 import numpy as np
 from cherab.tools.emitters import RadiationFunction
 from raysect.optical import VolumeTransform  # type: ignore
 
 import main.Util_radDist as Util_radDist
+
+logger = logging.getLogger(__name__)
 from main.Globals import EMIS3D_INPUTS_DIRECTORY
 from main.Tokamak import Tokamak
 from main.Util import XY_To_RPhi, convert_arrays_to_list, save_json
@@ -58,7 +62,7 @@ class RadDist(ABC):
             loadBolometers=loadBolometers,
         )
 
-    def _evalulateCherab(self, X, Y, Z) -> np.ndarray:
+    def _evaluate_cherab(self, X, Y, Z) -> np.ndarray:
         """
         Wrapper function for self.calc_emissivity to take inputs from Cherab
         """
@@ -74,6 +78,9 @@ class RadDist(ABC):
             emissionName=self.emissionName,
         )
         return emission[self.emissionName].item()
+
+    # Backwards-compatible alias — will be removed in a future release
+    _evalulateCherab = _evaluate_cherab
 
     def _update_bolometer_properties(self) -> None:
         """
@@ -96,11 +103,9 @@ class RadDist(ABC):
             elif hasattr(bolo_, "foil_detectors"):
                 foils = list(bolo_.foil_detectors)
             else:
-                print("---  ERROR. ---")
-                print(
-                    f"Could not update bolometer properties in RadDist._update_bolometer_properties()"
+                logger.error(
+                    "Could not update bolometer properties in RadDist._update_bolometer_properties()"
                 )
-                print("---  ERROR. ---")
                 foils = []
             for foil in foils:
                 foil.render_engine.processes = numProcessors
@@ -295,7 +300,7 @@ class RadDist(ABC):
         Replaces the power_per_bin_calc with a vectorized version.
         """
 
-        # --- Initilize items
+        # --- Initialize items
         self.data = {}
         self.data["emisSumArray"] = {}
         self.data["emisSqArray"] = {}
@@ -411,8 +416,10 @@ class RadDist(ABC):
                     self.data["powerPerBin"][key_] = integemisarray[key_]
             else:
                 if pointsperbin % (Pointsupdate * 100) == 0:
-                    print(
-                        f"Number of points {pointsperbin}, total std. err fraction so far = {toterrfrac:.2e}"
+                    logger.debug(
+                        "Number of points %d, total std. err fraction so far = %.2e",
+                        pointsperbin,
+                        toterrfrac,
                     )
 
     def bolos_observe(self) -> None:
@@ -432,7 +439,7 @@ class RadDist(ABC):
         elif units == "Brightness":
             self.data["units"] = "Brightness [W / m2]"
 
-        # --- Initilize the data storage arrays
+        # --- Initialize the data storage arrays
         boloCameras = self.tokamak.bolometers
         if not hasattr(self, "data"):
             self.data = {}
@@ -470,7 +477,7 @@ class RadDist(ABC):
 
         if emitter is not None:
             emittting_material = VolumeTransform(
-                RadiationFunction(self._evalulateCherab), emitter.transform.inverse()
+                RadiationFunction(self._evaluate_cherab), emitter.transform.inverse()
             )
             emitter.material = emittting_material
         else:
@@ -546,17 +553,14 @@ class RadDist(ABC):
                                         ans_error = radiance_error
 
                             except Exception as e:
-                                print(
-                                    f"An error occured while observing the radiance or brightness, {e}"
-                                )
-
-                                print(f"Etendue {bolo_.etendues[jj]}")
-                                print(f"Sensitivity {foil.sensitivity}")
-                                print(
-                                    f"foil.pipelines[0].value.mean {foil.pipelines[0].value.mean}"
-                                )
-                                print(
-                                    f"foil.pipelines[0].value.error() {foil.pipelines[0].value.error()}"
+                                logger.error(
+                                    "Error observing radiance/brightness: %s "
+                                    "(etendue=%.4g, sensitivity=%.4g, mean=%.4g, error=%.4g)",
+                                    e,
+                                    bolo_.etendues[jj],
+                                    foil.sensitivity,
+                                    foil.pipelines[0].value.mean,
+                                    foil.pipelines[0].value.error(),
                                 )
 
                         elif units == "Power":
@@ -564,7 +568,7 @@ class RadDist(ABC):
                             ans_error = foil.pipelines[0].value.error()
 
                     except Exception as e:
-                        print(f"An error occured in bolos_observe: {e}")
+                        logger.error("An error occurred in bolos_observe: %s", e)
                         # print(
                         #    f"Single layer cameras currently not supported, add functionality within bolos_observe!"
                         # )
@@ -744,11 +748,38 @@ class RadDist(ABC):
             else:
                 plt.show()
 
-    @abstractmethod
+    def _folder_suffix(self) -> str:
+        """
+        Return the unique suffix appended to this distribution's save folder name.
+        Subclasses that need a different suffix (e.g. Helical) should override this.
+        """
+        return f"_rotation{self.info['rotationAngle']}"
+
     def saveRadDist(self) -> None:
-        """
-        Abstract method to be implemented by subclasses to save the radDist
-        """
+        """Save the radDist info and data to a JSON file."""
+        toSave = {
+            "info": convert_arrays_to_list(self.info),
+            "data": convert_arrays_to_list(self.data),
+        }
+        folderName = (
+            f"{self.info['distType']}_polSigma_{self.info['polSigma']}"
+            f"{self._folder_suffix()}"
+        )
+        saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
+        pathFileName = (
+            EMIS3D_INPUTS_DIRECTORY
+            / self.info["tokamakName"]
+            / "radDists"
+            / self.info["saveRunsDirectoryName"]
+            / folderName
+        )
+        save_json(toSave, pathFileName, saveFileName)
+        str_ = (
+            f"radDist saved to:\n"
+            f"  folder  : {folderName}\n"
+            f"  filename: {saveFileName}"
+        )
+        logger.info("%s", str_)
 
     @abstractmethod
     def _scaling_factor(
@@ -789,10 +820,12 @@ class Helical(RadDist):
         # --- Create the field line to trace
         if setFieldLine:
 
-            print(
-                f"→ Building Helical radDist | "
-                f"polSigma={self.info['polSigma']:.2f}, "
-                f"R={startR:.2f} m, z={startZ:.2f} m"
+            logger.info(
+                "Building %s radDist | polSigma=%.2f, R=%.2f m, z=%.2f m",
+                self.info["distType"],
+                self.info["polSigma"],
+                startR,
+                startZ,
             )
 
             self._build_tokamak(
@@ -802,6 +835,9 @@ class Helical(RadDist):
                 eqFileName=self.info["eqFileName"],
             )
             self.setFieldLine()
+
+    def _folder_suffix(self) -> str:
+        return f"_sigmaKernel{self.info['sigmaKernel']}"
 
     def setFieldLine(self) -> None:
         """
@@ -863,7 +899,7 @@ class Helical(RadDist):
         emissionName : str, optional — defaults to self.emissionName if not given.
         """
 
-        # --- Set emissionName, this happens when self._evalulateCherab() is used
+        # --- Set emissionName, this happens when self._evaluate_cherab() is used
         if emissionName is None:
             emissionName = self.emissionName
 
@@ -909,31 +945,6 @@ class Helical(RadDist):
 
         return [phi + rev_number * 2.0 * np.pi] * num_channels
 
-    def saveRadDist(self) -> None:
-        """
-        Saves the data and radDist information
-        """
-
-        # --- Convert items within the self.info and self.data to lists
-        toSave = {
-            "info": convert_arrays_to_list(self.info),
-            "data": convert_arrays_to_list(self.data),
-        }
-
-        # --- Save the data
-        folderName = f"{self.info['distType']}_polSigma_{self.info['polSigma']}_sigmaKernel{self.info['sigmaKernel']}"
-        saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
-
-        pathFileName = (
-            EMIS3D_INPUTS_DIRECTORY
-            / self.info["tokamakName"]
-            / "radDists"
-            / self.info["saveRunsDirectoryName"]
-            / folderName
-        )
-
-        save_json(toSave, pathFileName, saveFileName)
-
 
 class HelicalRing(RadDist):
     """
@@ -966,7 +977,7 @@ class HelicalRing(RadDist):
         if setFieldLine:
             str_ = f"→ Building HelicalRing radDist using a polSigma of {self.info['polSigma']:.2f} elongation of {self.info['elongation']:.2f},"
             str_ += f" starting at R = {startR:.2f}m and z = {startZ:.2f}m"
-            print(str_)
+            logger.info("%s", str_)
             self._build_tokamak(
                 tokamakName=self.info["tokamakName"],
                 mode="Build",
@@ -1015,7 +1026,7 @@ class HelicalRing(RadDist):
         emissionName : str, optional — defaults to self.emissionName if not given.
         """
 
-        # --- Set emissionName if called with self._evalulateCherab()
+        # --- Set emissionName if called with self._evaluate_cherab()
         if emissionName is None:
             emissionName = self.emissionName
 
@@ -1101,31 +1112,6 @@ class HelicalRing(RadDist):
 
         return [phi + rev_number * 2.0 * np.pi] * num_channels
 
-    def saveRadDist(self) -> None:
-        """
-        Saves the data and radDist information
-        """
-
-        # --- Convert items within the self.info and self.data to lists
-        toSave = {
-            "info": convert_arrays_to_list(self.info),
-            "data": convert_arrays_to_list(self.data),
-        }
-
-        # --- Save the data
-        folderName = f"{self.info['distType']}_polSigma_{self.info['polSigma']}_rotation{self.info['rotationAngle']}"
-        saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
-
-        pathFileName = (
-            EMIS3D_INPUTS_DIRECTORY
-            / self.info["tokamakName"]
-            / "radDists"
-            / self.info["saveRunsDirectoryName"]
-            / folderName
-        )
-
-        save_json(toSave, pathFileName, saveFileName)
-
 
 class ElongatedRing(RadDist):
     """
@@ -1166,7 +1152,7 @@ class ElongatedRing(RadDist):
             str_ = f"→ Building Elongated Ring radDist using a polSigma of {self.info['polSigma']:.2f}"
             str_ += f", elongation of {self.info['elongation']:.2f}, rotation angle of {self.info['rotationAngle']:.2f}, starting at R = {startR:.2f}m and z = {startZ:.2f}"
 
-            print(str_)
+            logger.info("%s", str_)
 
     def _evaluate(
         self,
@@ -1183,7 +1169,7 @@ class ElongatedRing(RadDist):
         R, z, phi    : array-like — evaluation coordinates.
         emissionName : str, optional — defaults to self.emissionName if not given.
         """
-        # --- Set emissionName if called with self._evalulateCherab()
+        # --- Set emissionName if called with self._evaluate_cherab()
         if emissionName is None:
             emissionName = self.emissionName
 
@@ -1216,31 +1202,6 @@ class ElongatedRing(RadDist):
         phi = np.deg2rad(float(bolo_info["CAMERA_POSITION_R_Z_PHI"][2]))
 
         return [float(phi)] * numChan
-
-    def saveRadDist(self) -> None:
-        """
-        Saves the data and radDist information
-        """
-
-        # --- Convert items within the self.info and self.data to lists
-        toSave = {
-            "info": convert_arrays_to_list(self.info),
-            "data": convert_arrays_to_list(self.data),
-        }
-
-        # --- Save the data
-        folderName = f"{self.info['distType']}_polSigma_{self.info['polSigma']}_rotation{self.info['rotationAngle']}"
-        saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
-
-        pathFileName = (
-            EMIS3D_INPUTS_DIRECTORY
-            / self.info["tokamakName"]
-            / "radDists"
-            / self.info["saveRunsDirectoryName"]
-            / folderName
-        )
-
-        save_json(toSave, pathFileName, saveFileName)
 
 
 class SquareTube(RadDist):
@@ -1283,7 +1244,7 @@ class SquareTube(RadDist):
         )
 
         str_ = f"→ Building Square Tube radDist using starting at R = {startR:.2f} +/- {dR:.2f}m and z = {startZ:.2f} +/- {dz:.2f}m"
-        print(str_)
+        logger.info("%s", str_)
 
     def _evaluate(
         self,
@@ -1301,7 +1262,7 @@ class SquareTube(RadDist):
         emissionName : str, optional — defaults to self.emissionName if not given.
         """
 
-        # --- Set emissionName if called with self._evalulateCherab()
+        # --- Set emissionName if called with self._evaluate_cherab()
         if emissionName is None:
             emissionName = self.emissionName
 
@@ -1337,28 +1298,3 @@ class SquareTube(RadDist):
         phi = np.deg2rad(float(bolo_info["CAMERA_POSITION_R_Z_PHI"][2]))
 
         return [float(phi)] * numChan
-
-    def saveRadDist(self) -> None:
-        """
-        Saves the data and radDist information
-        """
-
-        # --- Convert items within the self.info and self.data to lists
-        toSave = {
-            "info": convert_arrays_to_list(self.info),
-            "data": convert_arrays_to_list(self.data),
-        }
-
-        # --- Save the data
-        folderName = f"{self.info['distType']}_polSigma_{self.info['polSigma']}_rotation{self.info['rotationAngle']}"
-        saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
-
-        pathFileName = (
-            EMIS3D_INPUTS_DIRECTORY
-            / self.info["tokamakName"]
-            / "radDists"
-            / self.info["saveRunsDirectoryName"]
-            / folderName
-        )
-
-        save_json(toSave, pathFileName, saveFileName)

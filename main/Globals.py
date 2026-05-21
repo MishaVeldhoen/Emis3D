@@ -36,5 +36,3 @@ __all__ = [
     "EMIS3D_INPUTS_DIRECTORY",
     "SUPPORTED_TOKAMAKS",
 ]
-
-

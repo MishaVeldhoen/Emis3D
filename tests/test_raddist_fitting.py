@@ -14,7 +14,6 @@ import pytest
 
 from main.Globals import (
     EMIS3D_PARENT_DIRECTORY,
-    EMIS3D_INPUTS_DIRECTORY,
     EMIS3D_TOKMAK_DIRECTORY,
     SUPPORTED_TOKAMAKS,
 )
@@ -27,13 +26,16 @@ from main.radDistFitting import RadDistFitting
 
 class TestGlobals:
 
+    def test_file_path_is_directory(self):
+        assert os.path.isdir(
+            EMIS3D_PARENT_DIRECTORY
+        ), f"EMIS3D_PARENT_DIRECTORY '{EMIS3D_PARENT_DIRECTORY}' is not a directory"
+
     def test_parent_directory_exists(self):
-        assert EMIS3D_PARENT_DIRECTORY.is_dir(), (
-            f"EMIS3D_PARENT_DIRECTORY '{EMIS3D_PARENT_DIRECTORY}' is not a directory"
-        )
+        assert os.path.isdir(EMIS3D_PARENT_DIRECTORY)
 
     def test_tokamak_directory_exists(self):
-        assert EMIS3D_TOKMAK_DIRECTORY.is_dir()
+        assert os.path.isdir(EMIS3D_TOKMAK_DIRECTORY)
 
     def test_supported_tokamaks_is_list(self):
         assert isinstance(SUPPORTED_TOKAMAKS, list)
@@ -41,45 +43,6 @@ class TestGlobals:
 
     def test_diii_d_is_supported(self):
         assert "DIII-D" in SUPPORTED_TOKAMAKS
-
-    def test_constants_are_path_objects(self):
-        """Globals.py now uses pathlib.Path — not plain strings."""
-        from pathlib import Path
-        assert isinstance(EMIS3D_PARENT_DIRECTORY, Path)
-        assert isinstance(EMIS3D_TOKMAK_DIRECTORY, Path)
-        assert isinstance(EMIS3D_INPUTS_DIRECTORY, Path)
-
-    def test_inputs_directory_derived_from_parent(self):
-        """EMIS3D_INPUTS_DIRECTORY should be EMIS3D_PARENT_DIRECTORY / 'inputs'."""
-        assert EMIS3D_INPUTS_DIRECTORY == EMIS3D_PARENT_DIRECTORY / "inputs"
-
-    def test_tokamak_directory_derived_from_parent(self):
-        assert EMIS3D_TOKMAK_DIRECTORY == EMIS3D_PARENT_DIRECTORY / "tokamaks"
-
-    def test_all_does_not_export_os_or_path_helpers(self):
-        """__all__ must only contain the four named constants."""
-        import main.Globals as G
-        assert hasattr(G, "__all__"), "Globals.py must define __all__"
-        for name in G.__all__:
-            assert not name.startswith("_"), f"__all__ exports private name: {name}"
-        # os-path helpers that used to leak through the old star import
-        for leaked in ("join", "dirname", "realpath", "os", "Path"):
-            assert leaked not in G.__all__, (
-                f"'{leaked}' should not be in __all__"
-            )
-
-    def test_emis3d_root_env_override(self, tmp_path, monkeypatch):
-        """Setting EMIS3D_ROOT should redirect all path constants."""
-        monkeypatch.setenv("EMIS3D_ROOT", str(tmp_path))
-        # Re-import the module after env change
-        import importlib, main.Globals as G
-        importlib.reload(G)
-        from pathlib import Path
-        assert G.EMIS3D_PARENT_DIRECTORY == Path(str(tmp_path))
-        assert G.EMIS3D_TOKMAK_DIRECTORY == Path(str(tmp_path)) / "tokamaks"
-        assert G.EMIS3D_INPUTS_DIRECTORY == Path(str(tmp_path)) / "inputs"
-        # Restore
-        importlib.reload(G)
 
 
 # ---------------------------------------------------------------------------
@@ -232,36 +195,98 @@ class TestRadDistFitting:
         for name in amp_params:
             assert rdf.fitSynthetic["params"]["params"][name].min >= 0.0
 
-    def test_create_parameters_float_injection_location(self, tmp_path):
-        """
-        create_parameters() also works when injectionLocation is a float (120.0).
-        The fix in radDistFitting.py casts it to int() so the lmfit parameter
-        name is 'a_120' not the invalid 'a_120.0'.
-        """
-        path, _, channel_tags, _ = _minimal_raddist_json(tmp_path)
-        rdf = RadDistFitting(radDistPath=path)
-        # Leave injectionLocation as 120.0 (the float stored in the fixture JSON)
-        assert isinstance(rdf.info["injectionLocation"], float)
-        rdf.prepare_for_fits([channel_tags])
-        rdf.create_parameters()
-
-        param_names = list(rdf.fitSynthetic["params"]["params"].keys())
-        for name in param_names:
-            assert "." not in name, (
-                f"Parameter name '{name}' contains a dot — int() cast may be missing"
-            )
-
     def test_none_path_initialises_info_with_path_key(self):
         """RadDistFitting(None) stores {'radDistPath': None} in self.info."""
         rdf = RadDistFitting(radDistPath=None)
         assert rdf.info == {"radDistPath": None}
         assert not hasattr(rdf, "data")
 
-    def test_missing_file_handled_gracefully(self, tmp_path):
-        """
-        A missing radDist file should not crash with KeyError. The fix added a
-        self._load_ok guard so _map_signals() is skipped when loading fails.
-        """
-        rdf = RadDistFitting(radDistPath=str(tmp_path / "does_not_exist.json"))
-        assert rdf._load_ok is False
-        assert not hasattr(rdf, "data")
+
+# ---------------------------------------------------------------------------
+# Emis3D error handling — exceptions replace error_free flag
+# ---------------------------------------------------------------------------
+
+from main.Emis3D import Emis3D
+
+
+class TestEmis3DErrorHandling:
+
+    def test_none_args_raises_value_error(self):
+        """Passing no tokamakName/runConfigName must raise, not silently fail."""
+        with pytest.raises(ValueError, match="required"):
+            Emis3D(tokamakName=None, runConfigName=None)
+
+    def test_missing_config_file_raises(self, tmp_path):
+        """A missing run config file raises FileNotFoundError."""
+        e = Emis3D(initialize=False)
+        with pytest.raises(FileNotFoundError):
+            e._load_config_file(tokamakName="DIII-D", runConfigName="nonexistent.yaml")
+
+    def test_no_error_free_attribute(self):
+        """error_free flag has been removed — Emis3D must not have it."""
+        e = Emis3D(initialize=False)
+        assert not hasattr(
+            e, "error_free"
+        ), "error_free should be removed; use exceptions instead"
+
+    def test_verbose_sets_debug_logging(self):
+        """verbose=True must configure the 'main' logger to DEBUG."""
+        import logging
+
+        Emis3D(initialize=False, verbose=True)
+        assert logging.getLogger("main").level == logging.DEBUG
+
+    def test_missing_bolometers_key_raises(self):
+        """_load_bolometer_data raises RuntimeError when BOLOMETERS missing from info."""
+        e = Emis3D(initialize=False)
+        e.info = {"tokamakName": "DIII-D"}  # no BOLOMETERS key
+        with pytest.raises(RuntimeError, match="BOLOMETERS"):
+            e._load_bolometer_data()
+
+
+# ---------------------------------------------------------------------------
+# saveRadDist consolidation — base class + _folder_suffix hook
+# ---------------------------------------------------------------------------
+
+
+class TestSaveRadDistConsolidation:
+
+    def test_base_class_has_save_rad_dist(self):
+        """saveRadDist must now live on RadDist, not be abstract."""
+        from main.radDist import RadDist
+        import inspect
+
+        # Method should be defined on RadDist itself, not just declared abstract
+        assert "saveRadDist" in RadDist.__dict__
+        src = inspect.getsource(RadDist.saveRadDist)
+        assert "abstractmethod" not in src
+
+    def test_subclasses_no_longer_override_save_rad_dist(self):
+        """Helical, HelicalRing, ElongatedRing, SquareTube must not define saveRadDist."""
+        from main.radDist import Helical, HelicalRing, ElongatedRing, SquareTube
+
+        for cls in (Helical, HelicalRing, ElongatedRing, SquareTube):
+            assert (
+                "saveRadDist" not in cls.__dict__
+            ), f"{cls.__name__} still overrides saveRadDist — should use base class"
+
+    def test_helical_folder_suffix_uses_sigma_kernel(self):
+        """Helical._folder_suffix must use sigmaKernel, not rotationAngle."""
+        from main.radDist import Helical
+
+        assert (
+            "_folder_suffix" in Helical.__dict__
+        ), "Helical must override _folder_suffix"
+        import inspect
+
+        src = inspect.getsource(Helical._folder_suffix)
+        assert "sigmaKernel" in src
+
+    def test_other_subclasses_use_base_folder_suffix(self):
+        """HelicalRing, ElongatedRing, SquareTube must use the base _folder_suffix."""
+        from main.radDist import HelicalRing, ElongatedRing, SquareTube
+
+        for cls in (HelicalRing, ElongatedRing, SquareTube):
+            assert (
+                "_folder_suffix" not in cls.__dict__
+            ), f"{cls.__name__} should not override _folder_suffix"

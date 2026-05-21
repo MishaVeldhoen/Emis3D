@@ -14,7 +14,6 @@ TODO:
 1. Why don't the q=2 field lines match up after 2 revolutions? q=1 ones are fine...
 """
 
-
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy

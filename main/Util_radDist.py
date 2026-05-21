@@ -9,6 +9,7 @@ TODO:
 over the whole tokamak while calculating the radiated power?
 """
 
+import logging
 import os
 
 os.environ["KMP_WARNINGS"] = "FALSE"  # suppress the numba deprecation warning
@@ -21,6 +22,8 @@ import main.Util as Util
 import numba as nb
 import matplotlib.path
 from main.Tokamak import Tokamak
+
+logger = logging.getLogger(__name__)
 
 
 def radDist_ElongatedRing_parallel(
@@ -44,8 +47,8 @@ def radDist_ElongatedRing_parallel(
     )
     elongatedRing.build()
 
-    print(
-        f"DONE with elongatedRing radDist, R = {rzArray[0]:.2f}m, z = {rzArray[1]:.2f}m"
+    logger.info(
+        "DONE with elongatedRing radDist, R = %.2fm, z = %.2fm", rzArray[0], rzArray[1]
     )
     if return_result:
         return elongatedRing
@@ -71,7 +74,9 @@ def radDist_Helical_parallel(
     helical = radDist.Helical(startR=rzArray[0], startZ=rzArray[1], config=config)
     helical.build()
 
-    print(f"DONE with helical radDist, R = {rzArray[0]:.2f}m, z = {rzArray[1]:.2f}m")
+    logger.info(
+        "DONE with helical radDist, R = %.2fm, z = %.2fm", rzArray[0], rzArray[1]
+    )
 
     if return_result:
         return helical
@@ -97,7 +102,9 @@ def radDist_HelicalRing_parallel(
     helical = radDist.HelicalRing(startR=rzArray[0], startZ=rzArray[1], config=config)
     helical.build()
 
-    print(f"DONE with helical radDist, R = {rzArray[0]:.2f}m, z = {rzArray[1]:.2f}m")
+    logger.info(
+        "DONE with helical radDist, R = %.2fm, z = %.2fm", rzArray[0], rzArray[1]
+    )
 
     if return_result:
         return helical
@@ -122,7 +129,9 @@ def radDist_SquareTube_parallel(
     squareTube = radDist.SquareTube(startR=rzArray[0], startZ=rzArray[1], config=config)
     squareTube.build()
 
-    print(f"DONE with squareTube radDist, R = {rzArray[0]:.2f}m, z = {rzArray[1]:.2f}m")
+    logger.info(
+        "DONE with squareTube radDist, R = %.2fm, z = %.2fm", rzArray[0], rzArray[1]
+    )
     if return_result:
         return squareTube
 

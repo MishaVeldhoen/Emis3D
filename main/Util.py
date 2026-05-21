@@ -4,30 +4,36 @@ File contains general definitions used by many classes
 """
 
 import json
+import logging
 import os
 
 import h5py
 import numpy as np
 import yaml
 from raysect.core import Point2D
-from typing import Any
+from typing import Any, Union
+from pathlib import Path
+from raysect.core import Vector3D
+
+logger = logging.getLogger(__name__)
 
 
-def config_loader(pathFileName="", verbose=False):
+def config_loader(
+    pathFileName: Union[str, Path] = "", verbose: bool = False
+) -> dict | None:
     try:
-        # --- Open the file
         with open(pathFileName, "r") as f:
             config = yaml.safe_load(f)
         if verbose:
-            print(f"\n→ Loaded config file: {pathFileName}")
+            logger.debug("Loaded config file: %s", pathFileName)
         return config
 
     except Exception as e:
-        print(f"Could not load the configuration file: {pathFileName}, error: {e}")
+        logger.error("Could not load the configuration file: %s — %s", pathFileName, e)
         return None
 
 
-def XY_To_RPhi(X, Y, TorOffset=0.0):
+def XY_To_RPhi(X: float, Y: float, TorOffset: float = 0.0) -> tuple[float, float]:
     """Convert from the Cartesian x,y coordinates to the major radius and toroidal angle phi.
     Phi is returned in radians and R in meters"""
 
@@ -42,7 +48,7 @@ def XY_To_RPhi(X, Y, TorOffset=0.0):
     return R, phi
 
 
-def RPhi_To_XY(R, Phi):
+def RPhi_To_XY(R: float, Phi: float) -> tuple[float, float]:
 
     x = R * np.cos(Phi)
     y = R * np.sin(Phi)
@@ -50,7 +56,7 @@ def RPhi_To_XY(R, Phi):
     return x, y
 
 
-def rpz_XYZ(rpz):
+def rpz_XYZ(rpz: np.ndarray) -> np.ndarray:
     """
 
 
@@ -70,7 +76,7 @@ def rpz_XYZ(rpz):
         rpz = rpz.T
 
     if np.shape(rpz)[0] != 3:
-        raise ValueError("Input to rpz_XYZ does not start with a dimenion of length 3")
+        raise ValueError("Input to rpz_XYZ does not start with a dimension of length 3")
 
     XYZ = rpz * 0.0
     XYZ[0, :] = rpz[0, :] * np.cos(rpz[1, :])
@@ -80,10 +86,8 @@ def rpz_XYZ(rpz):
     return XYZ
 
 
-def xyz_RPZ(XYZ, PhiOffset=0.0, Sign=1.0):
+def xyz_RPZ(XYZ: np.ndarray, PhiOffset: float = 0.0, Sign: float = 1.0) -> np.ndarray:
     """
-
-
     Parameters
     ----------
     XYZ : 3xN array of X, Y, and Z
@@ -93,7 +97,6 @@ def xyz_RPZ(XYZ, PhiOffset=0.0, Sign=1.0):
     Returns
     -------
     rpz
-
     """
 
     if np.shape(XYZ)[0] != 3:
@@ -107,7 +110,9 @@ def xyz_RPZ(XYZ, PhiOffset=0.0, Sign=1.0):
     return rpz
 
 
-def length_along_wall(Rwall, Zwall, R0):
+def length_along_wall(
+    Rwall: np.ndarray, Zwall: np.ndarray, R0: float
+) -> tuple[np.ndarray, float]:
     """
     Compute length along the wall
     return Swall, Swall_max
@@ -153,7 +158,9 @@ def length_along_wall(Rwall, Zwall, R0):
     return Swall, Swall_max
 
 
-def draw_radial_lines(x0, y0, R, angle_deg=0.0, initial_offset=0.0):
+def draw_radial_lines(
+    x0: float, y0: float, R: float, angle_deg: float = 0.0, initial_offset: float = 0.0
+) -> dict:
     """
     Returns starting and ending points for a line staring at an initial location
     going in a direction angle_deg + initial_offset. Used in create_d3d_observers.py
@@ -174,7 +181,7 @@ def draw_radial_lines(x0, y0, R, angle_deg=0.0, initial_offset=0.0):
     return answer
 
 
-def rZ_to_theta(r, z, r0=None, z0=None):
+def rZ_to_theta(r: float, z: float, r0: float = 0.0, z0: float = 0.0) -> float | None:
     """
     Returns theta given the initial coordinates.
     """
@@ -201,7 +208,9 @@ def rZ_to_theta(r, z, r0=None, z0=None):
     return theta
 
 
-def find_intersection(line, vessel_R, vessel_Z):
+def find_intersection(
+    line: dict, vessel_R: np.ndarray, vessel_Z: np.ndarray
+) -> tuple[float, float]:
     """
     Used by create_d3d_observers to find where a line, defined by two points
     intersects the vessel
@@ -223,12 +232,14 @@ def find_intersection(line, vessel_R, vessel_Z):
     return vessel[i][0], vessel[i][1]
 
 
-def unit_vector_from_angle(deg):
+def unit_vector_from_angle(deg: float) -> np.ndarray:
     rad = np.deg2rad(deg)
     return np.array([np.cos(rad), np.sin(rad)])
 
 
-def intersect_lines(p1, d1, p2, d2):
+def intersect_lines(
+    p1: np.ndarray, d1: np.ndarray, p2: np.ndarray, d2: np.ndarray
+) -> np.ndarray | None:
     """
     Find intersection of two lines defined by:
     p1 = point on line 1
@@ -249,7 +260,9 @@ def intersect_lines(p1, d1, p2, d2):
     return intersection
 
 
-def rz_to_xyz(R, z, toroidal_angle_rad):
+def rz_to_xyz(
+    R: np.ndarray, z: np.ndarray, toroidal_angle_rad: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Convert arrays of (R, z) points to (x, y, z) by rotating around the z-axis
     by a specified toroidal angle (in radians).
@@ -274,7 +287,7 @@ def rz_to_xyz(R, z, toroidal_angle_rad):
     return x, y, z
 
 
-def rotate_vector(vector, axis, angle_rad):
+def rotate_vector(vector: Vector3D, axis: Vector3D, angle_rad: float) -> Vector3D:
     axis = axis.normalise()
     v_parallel = axis * vector.dot(axis)
     v_perp = vector - v_parallel
@@ -299,7 +312,7 @@ def convert_arrays_to_list(obj) -> Any:
         return obj
 
 
-def save_json(obj, pathFileName, saveFileName):
+def save_json(obj: Any, pathFileName: Union[str, Path], saveFileName: str) -> None:
     """
     Saves the obj, creates the directories if needed
     """
@@ -314,7 +327,7 @@ def save_json(obj, pathFileName, saveFileName):
         json.dump(obj, f, indent=4, ensure_ascii=False)
 
 
-def load_json(pathFileName):
+def load_json(pathFileName: Union[str, Path]) -> dict:
     """
     Loads the json file from the given path
     """
@@ -324,7 +337,7 @@ def load_json(pathFileName):
     return data
 
 
-def get_filenames_in_directory(directory_path):
+def get_filenames_in_directory(directory_path: Union[str, Path]) -> list[str]:
     """
     Returns a list of all files within the specified directory and its subdirectories.
 
@@ -338,7 +351,7 @@ def get_filenames_in_directory(directory_path):
     return files
 
 
-def read_h5(path):
+def read_h5(path: Union[str, Path]) -> dict:
     data = {}
     with h5py.File(path, "r") as f:
         for dset in _traverse_datasets(f):
@@ -352,7 +365,7 @@ def read_h5(path):
     return data
 
 
-def _traverse_datasets(hdf_file):
+def _traverse_datasets(hdf_file: h5py.File):
     # Taken from: https://stackoverflow.com/questions/51548551/reading-nested-h5-group-into-numpy-array
     def h5py_dataset_iterator(g, prefix=""):
         for key in g.keys():
@@ -367,7 +380,9 @@ def _traverse_datasets(hdf_file):
         yield path
 
 
-def _ensure_path(data, path, default=None, default_func=lambda x: x):
+def _ensure_path(
+    data: dict, path: list[str], default: Any = None, default_func=lambda x: x
+) -> dict:
     """
     # Taken from: https://stackoverflow.com/questions/16333296/how-do-you-create-nested-dict-in-python
     Function:
@@ -411,7 +426,7 @@ def _ensure_path(data, path, default=None, default_func=lambda x: x):
     return data
 
 
-def find_max_nested_lists(list_):
+def find_max_nested_lists(list_: list[list]) -> float:
     """
     Finds the max value within nested lists
     """
@@ -419,7 +434,7 @@ def find_max_nested_lists(list_):
     return max(l_)
 
 
-def point3d_to_rz(point):
+def point3d_to_rz(point) -> tuple[float, float]:
     return Point2D(np.hypot(point.x, point.y), point.z)
 
 
@@ -461,7 +476,7 @@ def split_revolutions(x, y, z, phi, R, L) -> list:
     return revolutions
 
 
-def get_rectangle_corners(rect):
+def get_rectangle_corners(rect) -> list:
     """
     Returns 4 world-space corners of a rectangular primitive.
     Assumes rectangle centered at local origin.
@@ -491,7 +506,7 @@ def get_rectangle_corners(rect):
     return corners
 
 
-def compute_etendue_metric(p1, p2):
+def compute_etendue_metric(p1, p2) -> float:
     """
     Simple angular separation metric in RZ plane.
     Larger separation = larger étendue.
