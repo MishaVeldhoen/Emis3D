@@ -491,8 +491,13 @@ class RadDist(ABC):
             # --- Add this to the data arrays
             self.emissionName = emissionName
 
+            # --- Remove each bolometer from the world
+            for bolo_ in boloCameras:
+                bolo_._change_parent(value=None)
+
             # --- Observe with each bolometer
             for bolo_ in boloCameras:
+                bolo_._change_parent(value=self.tokamak.world)
                 # print(f"Observing with {bolo_.name}")
                 observeVal = []
                 observeVal_error = []
@@ -581,6 +586,12 @@ class RadDist(ABC):
                 self.data[f"{units}_error"][emissionName][bolo_.name] = observeVal_error
                 if bolo_.name not in self.data[units]["channelOrder"]:
                     self.data[units]["channelOrder"][bolo_.name] = ch_order
+
+                bolo_._change_parent(value=None)
+
+            # --- Add each bolometer back to the world
+            for bolo_ in boloCameras:
+                bolo_._change_parent(value=self.tokamak.world)
 
     def plotCrossSection(self, phi: float = 0.0, ax=None) -> None:
         """
