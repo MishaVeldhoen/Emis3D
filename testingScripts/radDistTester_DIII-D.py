@@ -7,18 +7,17 @@ below.
 It is currently specific to DIII-D
 """
 
-import os
 import sys
+from pathlib import Path
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-import matplotlib.pyplot as plt
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(_REPO_ROOT))
+
 import numpy as np
-
 import main.Util_radDist as Util_radDist
-from main.Globals import *
-import time
+from main.Globals import EMIS3D_INPUTS_DIRECTORY
 from main.Util import config_loader
-import main.radDist as radDist
+import matplotlib.pyplot as plt
 from scipy.integrate import simpson
 
 tokamakName = "DIII-D"
@@ -29,9 +28,8 @@ rzvalues = [2.029, 0.409]
 plt.ion()
 
 # --- Create the radDist using only one point, we don't need to loop over everything
-pathFileName = os.path.join(
-    EMIS3D_INPUTS_DIRECTORY, tokamakName, "radDists", configFileName
-)
+pathFileName = EMIS3D_INPUTS_DIRECTORY / tokamakName / "radDists" / configFileName
+
 config = config_loader(pathFileName)
 if config is None:
     raise FileNotFoundError(f"Could not load config file: {pathFileName}")

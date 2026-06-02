@@ -7,17 +7,16 @@ below.
 It is currently specific to JET
 """
 
-import os
 import sys
+from pathlib import Path
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-import matplotlib.pyplot as plt
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(_REPO_ROOT))
+
 import numpy as np
-
 import main.Util_radDist as Util_radDist
-from main.Globals import *
+from main.Globals import EMIS3D_INPUTS_DIRECTORY
 from main.Util import config_loader
-from main.Emis3D import Emis3D
 
 tokamakName = "JET"
 configFileName = (
@@ -26,13 +25,10 @@ configFileName = (
 rzvalues = [2.897, 1.39]
 
 
-plt.ion()
-
 # --- Create the radDist using only one point, we don't need to loop over everything
-pathFileName = os.path.join(
-    EMIS3D_INPUTS_DIRECTORY, tokamakName, "radDists", configFileName
-)
+pathFileName = EMIS3D_INPUTS_DIRECTORY / tokamakName / "radDists" / configFileName
 config = config_loader(pathFileName)
+print(pathFileName)
 if config is None:
     raise FileNotFoundError(f"Could not load config file: {pathFileName}")
 
@@ -47,6 +43,7 @@ if "elongations" in config:
 if "rotationAngles" in config:
     config["rotationAngle"] = config["rotationAngles"][0]
 arg_list = (rzArray, config)
+
 
 # --- Create the radDist
 if config["distType"] == "Helical":

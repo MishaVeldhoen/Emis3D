@@ -8,7 +8,6 @@ python run_emis3D.py
 Written by JLH Sept. 2025
 """
 
-
 import os
 import sys
 
@@ -18,9 +17,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from concurrent.futures import ThreadPoolExecutor
 
 import time
-import main.Emis3D as Emis3D
+from main.Emis3D import Emis3D
 import main.Util_emis3D as Util_emis3D
-
 
 _global_data_dict = None
 
@@ -60,9 +58,7 @@ if __name__ == "__main__":
     verbose = True
 
     # ----- No need to update anything below
-    t = Emis3D.Emis3D(
-        tokamakName=tokamakName, runConfigName=runConfigName, verbose=verbose
-    )
+    t = Emis3D(tokamakName=tokamakName, runConfigName=runConfigName, verbose=verbose)
 
     for evalTime in evalTimes:
         t._prepare_fits(evalTime=evalTime, crossCalib=False)
