@@ -503,6 +503,11 @@ class RadDist(ABC):
                 observeVal_error = []
                 ch_order = []
 
+                if "FOIL_SLIT_ANGLE_FACTOR" in bolo_.info:
+                    FOIL_SLIT_ANGLE_FACTOR = bolo_.info["FOIL_SLIT_ANGLE_FACTOR"]
+                else:
+                    FOIL_SLIT_ANGLE_FACTOR = 1.0
+
                 # --- Set the units in the foil prior to observing the world
                 for jj, foil in enumerate(bolo_.bolometer_camera):
                     ans = 0
@@ -572,11 +577,15 @@ class RadDist(ABC):
                             ans = foil.pipelines[0].value.mean
                             ans_error = foil.pipelines[0].value.error()
 
+                        ans = ans * FOIL_SLIT_ANGLE_FACTOR
+                        ans_error = ans_error * FOIL_SLIT_ANGLE_FACTOR
+
                     except Exception as e:
                         logger.error("An error occurred in bolos_observe: %s", e)
                         # print(
                         #    f"Single layer cameras currently not supported, add functionality within bolos_observe!"
                         # )
+                    
                     observeVal.append(ans)
                     observeVal_error.append(ans_error)
                     ch_order.append(foil.name)
