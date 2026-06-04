@@ -279,6 +279,24 @@ def runParallel(job):
     return fit_index, fit
 
 
+def signal_error(
+    type: str,
+    signal: np.ndarray,
+    max_signal: float,
+    scale_factor: float = 1.0,
+):
+    """Wrapper for the error function"""
+
+    type_ = type.upper()
+
+    if type_ == "EXPONENTIAL":
+        return error_exponential(signal, max_signal, scale_factor)
+    elif type_ == "INVERSE":
+        return error_inverse(signal, max_signal, scale_factor)
+    elif type_ == "INVERSE SQUARE":
+        return error_inv_sqrt(signal, max_signal, scale_factor)
+
+
 def error_exponential(
     signal: np.ndarray,
     max_signal: float,

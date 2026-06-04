@@ -420,11 +420,14 @@ class Emis3D:
                 val = data_[channel]
                 temp.append(val)
 
-                # --- Large error for zero signal
+                # --- Large error for zero signal, use definition otherwise
+
                 if val > 1.0:
-                    err_frac = Util_emis3D.error_exponential(
-                        val, max_, scale_factor=1.0
-                    )
+                    err_frac = 0.05
+                    if self.info is not None:
+                        err_frac = Util_emis3D.signal_error(
+                            self.info["error_definition"], val, max_, scale_factor=1.0
+                        )
                     err_ = val * err_frac
                 else:
                     err_ = np.float64(1.0e4)
@@ -964,7 +967,7 @@ class Emis3D:
 
             # --- elongatedRing distributions are symmetric, so we can skip a lot of this
             if emissionName == "elongatedRing":
-                # Symmetric: extend with a constant to avoid interpolation artefacts
+                # Symmetric: extend with a constant to avoid interpolation artifacts
                 y_ = np.mean(ppb_amp)
                 x_all.extend(np.linspace(0, 2.0 * np.pi, 20))
                 y_all.extend(np.full(20, fill_value=y_))
