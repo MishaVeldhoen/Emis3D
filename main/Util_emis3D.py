@@ -182,7 +182,11 @@ def residual(
     a = 0.0
     b = 0.0
     params = pars.valuesdict()
+
+    # --- Check to see if the peak radiation location can be varied
     mu = float(synthetic_dict["injectionLocation_rad"])
+    if "peak_rad_loc" in params:
+        mu = float(params["peak_rad_loc"])
 
     # --- Find the total synthetic emission
     temp_ = {}  # accumulated model signal per bolometer group

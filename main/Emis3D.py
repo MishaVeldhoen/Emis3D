@@ -468,11 +468,7 @@ class Emis3D:
 
         if self.info is not None and "enable_dphi_scaling" in self.info:
 
-            boloNames = (
-                self.channel_order["bolometer_order"]
-                if self.info["enable_dphi_scaling"]
-                else None
-            )
+            boloNames = self.channel_order["bolometer_order"] if crossCalib else None
 
             # --- Arrange and create parameters for the location dependent data
             for loc in self.data["synthetic"]["locDependent"]:
@@ -486,6 +482,7 @@ class Emis3D:
                     radD.create_parameters(
                         boloNames=boloNames,
                         enable_dphi_scaling=self.info["enable_dphi_scaling"],
+                        vary_peak_rad_location=self.info["vary_peak_rad_location"],
                     )
                     if "ERROR CHANNELS" in radD.info and print_minor_error:
                         print_error(radD)
@@ -500,6 +497,7 @@ class Emis3D:
                 radD.create_parameters(
                     boloNames=boloNames,
                     enable_dphi_scaling=self.info["enable_dphi_scaling"],
+                    vary_peak_rad_location=self.info["vary_peak_rad_location"],
                 )
 
                 if "ERROR CHANNELS" in radD.info and print_minor_error:
@@ -831,7 +829,13 @@ class Emis3D:
         scale_def = self.info["scale_def"]
         params = self.bestFits[evalTime]["fit"].params.valuesdict()
 
+        # --- Check to see if the peak radiation location can be varied
         mu = self.bestFits[evalTime]["synthetic_dict"]["injectionLocation_rad"]
+        if "peak_rad_loc" in self.bestFits[evalTime]["synthetic_dict"]:
+            mu = float(self.bestFits[evalTime]["synthetic_dict"]["peak_rad_loc"])
+
+        # This should probably be renamed, but is the value after the underscore
+        # the a_ and b_ parameters
         mu_deg = self.bestFits[evalTime]["synthetic_dict"]["injectionLocation"]
         numTransits = len(self.bestFits[evalTime]["radDistInfo"]["emissionNames"]) / 2.0
 

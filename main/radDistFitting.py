@@ -167,7 +167,10 @@ class RadDistFitting:
             )
 
     def create_parameters(
-        self, boloNames: list | None = None, enable_dphi_scaling: bool = False
+        self,
+        boloNames: list | None = None,
+        enable_dphi_scaling: bool = False,
+        vary_peak_rad_location: bool = False,
     ) -> None:
         """
         Creates the LMFIT parameters for the radDist
@@ -190,9 +193,21 @@ class RadDistFitting:
                 self.fitSynthetic["params"]["paramName"].append(paramName)
                 params.add(paramName, value=0.3, min=0)
 
+        # --- Create a peak radiation variable if vary_peak_rad_location is True:
+        if vary_peak_rad_location:
+            default_ = int(np.deg2rad(int(self.info["injectionLocation"])))
+            paramName = f"peak_rad_loc"
+            self.fitSynthetic["params"]["paramName"].append(paramName)
+            params.add(
+                paramName,
+                value=default_,  # Start at the injection location
+                min=0,
+                max=2.0 * np.pi,
+                vary=True,
+            )
+
         # --- The exponential decay factor for each emission, only do one for helical directions
         for emissionName in self.info["emissionNames"]:
-
             paramName = None
             min_ = 0.0
             paramName = f"b_{emissionName}_{int(self.info['injectionLocation'])}"
