@@ -466,9 +466,13 @@ class Emis3D:
         # --- Scale the synthetic data to observed for better fitting
         max_data_val = find_max_nested_lists(self.fitData[evalTime]["observed"])
 
-        if self.info is not None and "varyScaleFactor" in self.info:
+        if self.info is not None and "enable_dphi_scaling" in self.info:
 
-            boloNames = self.channel_order["bolometer_order"] if crossCalib else None
+            boloNames = (
+                self.channel_order["bolometer_order"]
+                if self.info["enable_dphi_scaling"]
+                else None
+            )
 
             # --- Arrange and create parameters for the location dependent data
             for loc in self.data["synthetic"]["locDependent"]:
@@ -481,7 +485,7 @@ class Emis3D:
 
                     radD.create_parameters(
                         boloNames=boloNames,
-                        varyScaleFactor=self.info["varyScaleFactor"],
+                        enable_dphi_scaling=self.info["enable_dphi_scaling"],
                     )
                     if "ERROR CHANNELS" in radD.info and print_minor_error:
                         print_error(radD)
@@ -495,7 +499,7 @@ class Emis3D:
                 )
                 radD.create_parameters(
                     boloNames=boloNames,
-                    varyScaleFactor=self.info["varyScaleFactor"],
+                    enable_dphi_scaling=self.info["enable_dphi_scaling"],
                 )
 
                 if "ERROR CHANNELS" in radD.info and print_minor_error:

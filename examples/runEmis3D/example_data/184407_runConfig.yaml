@@ -13,7 +13,7 @@ shot: 184407
 tstart: 2100 # Start time of the simultaion, same units as the SXR/bolometer signal
 tend: 2100 # End time of the simulation, can be equal to tstart to reconstruct one timestep
 dt: 0.3 # Averaging window 
-varyScaleFactor: True # False = the program will not vary the constant by the scale factor
+enable_dphi_scaling: True # False = the program will not vary the constant by the scale factor
 scale_def: "von_mises" # Options: "linear", "exponential", "constant", "von_mises"
 
 # Path for each data file relative to inputs/{tokamakName}/sxrData/

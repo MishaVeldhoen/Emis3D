@@ -167,7 +167,7 @@ class RadDistFitting:
             )
 
     def create_parameters(
-        self, boloNames: list | None = None, varyScaleFactor: bool = False
+        self, boloNames: list | None = None, enable_dphi_scaling: bool = False
     ) -> None:
         """
         Creates the LMFIT parameters for the radDist
@@ -206,7 +206,11 @@ class RadDistFitting:
             ):
                 self.fitSynthetic["params"]["paramName"].append(paramName)
                 params.add(
-                    paramName, value=2.0, vary=varyScaleFactor, min=min_, max=15.0
+                    paramName,
+                    value=2.0,
+                    vary=enable_dphi_scaling,
+                    min=min_,
+                    max=15.0,
                 )
 
         self.fitSynthetic["params"]["params"] = params
