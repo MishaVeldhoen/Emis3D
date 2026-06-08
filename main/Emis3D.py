@@ -1005,7 +1005,7 @@ class Emis3D:
 
                 # --- Clockwise data should be negative
                 if "clockwise" in emissionName:
-                    dphi_ = -dphi[sort_] + mu + offset
+                    dphi_ = dphi[sort_] + mu + offset
                     # OLD: dpi_ *= -1
                 else:
                     dphi_ = dphi[sort_] + mu + offset
