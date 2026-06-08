@@ -125,8 +125,8 @@ if __name__ == "__main__":
 
     if rzArray is not None:
         for rotationAngle in rotationAngles:
-            for sigma_z in sigma_z_vals:
-                for sigma_R in sigma_R_vals:
+            for sigma_R in sigma_R_vals:
+                for sigma_z in sigma_z_vals:
                     # --- Split the rzArray to conserve memory during the process pool executor,
                     # try to have it split up evenly between the numbe of processors used
                     num_split = 1
@@ -134,7 +134,7 @@ if __name__ == "__main__":
                         num_split = np.floor((rzArray.shape[0] / (numProcessors - 1.0)))
                     rzArray_split = np.array_split(rzArray, num_split)
                     for rz in rzArray_split:
-                        # --- Skip rotation angle if the sigma_z and sigma_R are equal (aka a circle)
+                        # --- Skip rotation angle if the sigma_R and sigma_z are equal (aka a circle)
                         # only do the case where the rotationAngle = 0
                         if sigma_z == sigma_R and rotationAngle > 0.0:
                             pass

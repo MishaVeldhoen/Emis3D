@@ -1095,16 +1095,16 @@ class HelicalRing(RadDist):
                     / (
                         2.0
                         * np.pi
-                        * self.info["sigma_z"]
-                        * (self.info["sigma_R"] ** 2)
+                        * self.info["sigma_R"]
+                        * (self.info["sigma_z"] ** 2)
                     )
                 )
                 * np.exp(
                     -0.5
                     * (perpdist**2)
-                    / (self.info["sigma_R"] * self.info["sigma_z"]) ** 2
+                    / (self.info["sigma_z"] * self.info["sigma_R"]) ** 2
                 )
-                * np.exp(-0.5 * (paralleldist**2) / self.info["sigma_R"] ** 2)
+                * np.exp(-0.5 * (paralleldist**2) / self.info["sigma_z"] ** 2)
             )
 
             localEmis[emissionName] = emis.flatten()
@@ -1201,8 +1201,8 @@ class ElongatedRing(RadDist):
             R0=self.info["startR"],
             z=z,
             z0=self.info["startZ"],
-            sigma_R=self.info["sigma_z"],
-            sigma_z=self.info["sigma_R"],
+            sigma_R=self.info["sigma_R"],
+            sigma_z=self.info["sigma_z"],
         )
         return localEmis
 
