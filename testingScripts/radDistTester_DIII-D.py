@@ -21,8 +21,7 @@ import matplotlib.pyplot as plt
 from scipy.integrate import simpson
 
 tokamakName = "DIII-D"
-configFileName = "helical_config.yaml"  # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"
-# rzvalues = [2.0, 0.56]
+configFileName = "elongatedRing_config.yaml"  # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"
 rzvalues = [2.029, 0.409]
 
 plt.ion()
@@ -38,10 +37,10 @@ if config is None:
 # --- Update the configuration file
 rzArray = np.array([rzvalues[0], rzvalues[1]])
 
-if "polSigmas" in config:
-    config["polSigma"] = config["polSigmas"][0]
-if "elongations" in config:
-    config["elongation"] = config["elongations"][0]
+if "sigma_R_vals" in config:
+    config["sigma_R"] = config["sigma_R_vals"][0]
+if "sigma_z_vals" in config:
+    config["sigma_z"] = config["sigma_z_vals"][0]
 if "rotationAngles" in config:
     config["rotationAngle"] = config["rotationAngles"][0]
 arg_list = (rzArray, config)

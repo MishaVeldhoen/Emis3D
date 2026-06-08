@@ -84,14 +84,14 @@ class TestBivariateNormal:
 
 class TestBivariateNormalElongated:
 
-    def test_reduces_to_isotropic_at_elongation_1_theta_0(self):
-        """elongation=1, theta=0 should equal bivariate_normal."""
+    def test_reduces_to_isotropic_at_sigma_z_1_theta_0(self):
+        """sigma_z=1, theta=0 should equal bivariate_normal."""
         R = np.linspace(-2, 2, 100) + 2.0
         z = np.zeros_like(R)
         R0, z0, sig = 2.0, 0.0, 0.5
 
         v_elongated = bivariate_normal_elongated(R, z, R0=R0, z0=z0,
-                                                 elongation=sig, pol_sigma=sig, theta=0.0)
+                                                 sigma_z=sig, pol_sigma=sig, theta=0.0)
         v_isotropic = bivariate_normal(R, z, R0=R0, z0=z0, pol_sigma=sig)
         assert np.allclose(v_elongated, v_isotropic, atol=1e-8)
 
@@ -101,7 +101,7 @@ class TestBivariateNormalElongated:
         RR, ZZ = np.meshgrid(R, z, indexing="ij")
         R0, z0 = 2.0, 0.5
         vals = bivariate_normal_elongated(RR.ravel(), ZZ.ravel(),
-                                          R0=R0, z0=z0, elongation=0.8, pol_sigma=0.3)
+                                          R0=R0, z0=z0, sigma_z=0.8, pol_sigma=0.3)
         idx = np.argmax(vals)
         assert np.isclose(RR.ravel()[idx], R0, atol=0.05)
         assert np.isclose(ZZ.ravel()[idx], z0, atol=0.05)
@@ -111,11 +111,11 @@ class TestBivariateNormalElongated:
         z = np.linspace(-3, 3, 30)
         RR, ZZ = np.meshgrid(R, z)
         vals = bivariate_normal_elongated(RR.ravel(), ZZ.ravel(),
-                                          R0=2.0, z0=0.0, elongation=1.5, pol_sigma=0.4)
+                                          R0=2.0, z0=0.0, sigma_z=1.5, pol_sigma=0.4)
         assert np.all(vals >= 0)
 
     def test_theta_changes_orientation(self):
-        """Rotating 90° should swap the R and z elongation directions."""
+        """Rotating 90° should swap the R and z sigma_z directions."""
         R0, z0, sig, elong = 2.0, 0.0, 0.2, 0.8
         # Point displaced in R direction
         R_disp = np.array([R0 + 0.3])
@@ -125,13 +125,13 @@ class TestBivariateNormalElongated:
         z_disp = np.array([z0 + 0.3])
 
         v_R_0deg = bivariate_normal_elongated(R_disp, z_mid, R0=R0, z0=z0,
-                                              elongation=elong, pol_sigma=sig, theta=0.0)
+                                              sigma_z=elong, pol_sigma=sig, theta=0.0)
         v_z_0deg = bivariate_normal_elongated(R_mid, z_disp, R0=R0, z0=z0,
-                                              elongation=elong, pol_sigma=sig, theta=0.0)
+                                              sigma_z=elong, pol_sigma=sig, theta=0.0)
         v_R_90deg = bivariate_normal_elongated(R_disp, z_mid, R0=R0, z0=z0,
-                                               elongation=elong, pol_sigma=sig, theta=90.0)
+                                               sigma_z=elong, pol_sigma=sig, theta=90.0)
         v_z_90deg = bivariate_normal_elongated(R_mid, z_disp, R0=R0, z0=z0,
-                                               elongation=elong, pol_sigma=sig, theta=90.0)
+                                               sigma_z=elong, pol_sigma=sig, theta=90.0)
         # At theta=0: elong > sig so the R direction is broader, giving higher value
         # At theta=90: the roles swap
         assert v_R_0deg[0] > v_z_0deg[0]

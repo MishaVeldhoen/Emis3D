@@ -33,8 +33,8 @@ from raysect.core import Point3D
 
 tokamakName = "DIII-D"
 configFileName = "sqaureTube_config.yaml"  # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"  #
-elongation = 0.1
-polSigma = 0.1
+sigma_z = 0.1
+sigma_R = 0.1
 rotationAngle = 0.0
 rzvalues = [1.65, 0.0]
 # Only use a specific channel

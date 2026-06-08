@@ -50,6 +50,8 @@ def radDist_ElongatedRing_parallel(
     logger.info(
         "DONE with elongatedRing radDist, R = %.2fm, z = %.2fm", rzArray[0], rzArray[1]
     )
+    print("DONE with elongatedRing radDist, R = %.2fm, z = %.2fm", rzArray[0], rzArray[1])
+
     if return_result:
         return elongatedRing
 
@@ -77,6 +79,7 @@ def radDist_Helical_parallel(
     logger.info(
         "DONE with helical radDist, R = %.2fm, z = %.2fm", rzArray[0], rzArray[1]
     )
+    print("DONE with helical radDist, R = %.2fm, z = %.2fm", rzArray[0], rzArray[1])
 
     if return_result:
         return helical
@@ -105,6 +108,7 @@ def radDist_HelicalRing_parallel(
     logger.info(
         "DONE with helical radDist, R = %.2fm, z = %.2fm", rzArray[0], rzArray[1]
     )
+    print("DONE with helical radDist, R = %.2fm, z = %.2fm", rzArray[0], rzArray[1])
 
     if return_result:
         return helical
@@ -132,6 +136,8 @@ def radDist_SquareTube_parallel(
     logger.info(
         "DONE with squareTube radDist, R = %.2fm, z = %.2fm", rzArray[0], rzArray[1]
     )
+    print("DONE with squareTube radDist, R = %.2fm, z = %.2fm", rzArray[0], rzArray[1])
+    
     if return_result:
         return squareTube
 
@@ -238,8 +244,8 @@ def bivariate_normal_elongated(
     z: np.ndarray,
     R0: float = 0.0,
     z0: float = 0.0,
-    elongation: float = 1.0,
-    pol_sigma: float = 1.0,
+    sigma_R: float = 1.0,
+    sigma_z: float = 1.0,
     theta: float = 0.0,
 ):
     """
@@ -254,8 +260,8 @@ def bivariate_normal_elongated(
     ----------
     R, z        : array-like — evaluation coordinates.
     R0, z0      : float      — centre of the distribution.
-    elongation  : float      — standard deviation along the R axis. Must be > 0.
-    pol_sigma    : float      — standard deviation along the z axis. Must be > 0.
+    sigma_R     : float      — standard deviation along the R axis. Must be > 0.
+    sigma_z     : float      — standard deviation along the z axis. Must be > 0.
     theta       : float      — rotation angle in degrees (counter-clockwise from R-axis).
 
     Returns
@@ -270,17 +276,17 @@ def bivariate_normal_elongated(
     theta_rad = np.deg2rad(theta)
     cos_t, sin_t = np.cos(theta_rad), np.sin(theta_rad)
 
-    a = cos_t**2 / (2.0 * elongation**2) + sin_t**2 / (2.0 * pol_sigma**2)
+    a = cos_t**2 / (2.0 * sigma_R**2) + sin_t**2 / (2.0 * sigma_z**2)
 
-    b = np.sin(2.0 * theta_rad) / (4.0 * elongation**2) - np.sin(2.0 * theta_rad) / (
-        4.0 * pol_sigma**2
+    b = np.sin(2.0 * theta_rad) / (4.0 * sigma_R**2) - np.sin(2.0 * theta_rad) / (
+        4.0 * sigma_z**2
     )
-    c = sin_t**2 / (2.0 * elongation**2) + cos_t**2 / (2.0 * pol_sigma**2)
+    c = sin_t**2 / (2.0 * sigma_R**2) + cos_t**2 / (2.0 * sigma_z**2)
 
     dR = R - R0
     dz = z - z0
 
-    norm = 1.0 / (2.0 * np.pi * elongation * pol_sigma)
+    norm = 1.0 / (2.0 * np.pi * sigma_R * sigma_z)
     exponent = -(a * dR**2 + 2.0 * b * dR * dz + c * dz**2)
 
     return norm * np.exp(exponent)
@@ -291,7 +297,7 @@ def bivariate_normal(
     z: np.ndarray,
     R0: float = 0.0,
     z0: float = 0.0,
-    pol_sigma: float = 1.0,
+    sigma_z: float = 1.0,
 ) -> np.ndarray:
     """
     Bivariate normal distribution in the poloidal plane.
@@ -302,7 +308,7 @@ def bivariate_normal(
     ----------
     R, z      : array-like — evaluation coordinates.
     R0, z0    : float      — centre of the distribution.
-    pol_sigma : float      — standard deviation (same in R and z). Must be > 0.
+    sigma_z : float      — standard deviation (same in R and z). Must be > 0.
 
     Returns
     -------
@@ -313,14 +319,14 @@ def bivariate_normal(
     R = np.asarray(R)
     z = np.asarray(z)
 
-    norm = 1 / (2 * np.pi * pol_sigma**2)
-    exponent = -0.5 * ((R - R0) ** 2 + (z - z0) ** 2) / pol_sigma**2
+    norm = 1 / (2 * np.pi * sigma_z**2)
+    exponent = -0.5 * ((R - R0) ** 2 + (z - z0) ** 2) / sigma_z**2
 
     return norm * np.exp(exponent)
 
 
 @nb.njit(parallel=True, fastmath=True, cache=True)
-def _evaluate_kernels(R, z, R0_arr, z0_arr, weights, pol_sigma):
+def _evaluate_kernels(R, z, R0_arr, z0_arr, weights, sigma_z):
     """
     Fused, parallelised kernel evaluation — avoids allocating any (M, N) matrix.
     Each output point is computed independently in parallel.
@@ -330,7 +336,7 @@ def _evaluate_kernels(R, z, R0_arr, z0_arr, weights, pol_sigma):
     R, z       : (N,) float64 — evaluation coordinates.
     R0_arr, z0_arr : (M,) float64 — field line centres.
     weights    : (M,) float64 — per-line weights.
-    pol_sigma  : float — kernel width.
+    sigma_z  : float — kernel width.
 
     Returns
     -------
@@ -338,8 +344,8 @@ def _evaluate_kernels(R, z, R0_arr, z0_arr, weights, pol_sigma):
     """
     N = len(R)
     M = len(weights)
-    norm = 1.0 / (2.0 * np.pi * pol_sigma**2)
-    inv_2sig2 = 0.5 / pol_sigma**2
+    norm = 1.0 / (2.0 * np.pi * sigma_z**2)
+    inv_2sig2 = 0.5 / sigma_z**2
 
     tot = np.zeros(N)
     for n in nb.prange(N):  # parallel over grid points
@@ -363,8 +369,8 @@ def bivariate_normal_isodensity_points(
     """
     Generate n source points and weights such that:
 
-        sum_i = w_i * bivariate_normal(R, z, R0=R0_i, z0=z0_i, pol_sigma=sigma_kernel)
-        ≈ bivariate_normal(R, z, R0=R0, z0=z0, pol_sigma=sigma_target)
+        sum_i = w_i * bivariate_normal(R, z, R0=R0_i, z0=z0_i, sigma_z=sigma_kernel)
+        ≈ bivariate_normal(R, z, R0=R0, z0=z0, sigma_z=sigma_target)
 
 
     Parameters

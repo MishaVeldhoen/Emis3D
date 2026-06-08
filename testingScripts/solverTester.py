@@ -88,8 +88,8 @@ def pellet_initial_parameters(csp=False):
 
 tokamakName = "DIII-D"
 configFileName = "helical_config.yaml"  # "sqaureTube_config.yaml"  # "elongatedRing_config.yaml"  # "helical_config.yaml"  #
-elongation = 2.0
-polSigma = 0.05
+sigma_z = 2.0
+sigma_R = 0.05
 rotationAngle = 0.0
 rzvalues = [2.055, 0.414]
 # --- Group the bolometers
@@ -126,8 +126,8 @@ rzArray = Util_radDist.callRZGridTokamak(
 rD = None
 if rzArray is not None:
     rzArray[0] = [rzvalues[0], rzvalues[1]]
-    config["polSigma"] = polSigma
-    config["elongation"] = elongation
+    config["sigma_R"] = sigma_R
+    config["sigma_z"] = sigma_z
     config["rotationAngle"] = rotationAngle
     config["saveRunsDirectoryName"] = "solverTesting"
     arg_list = [(val, config) for val in rzArray]

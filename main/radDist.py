@@ -782,7 +782,7 @@ class RadDist(ABC):
             "data": convert_arrays_to_list(self.data),
         }
         folderName = (
-            f"{self.info['distType']}_polSigma_{self.info['polSigma']}"
+            f"{self.info['distType']}_sigma_R_{self.info['sigma_R']}_sigma_z_{self.info['sigma_z']}"
             f"{self._folder_suffix()}"
         )
         saveFileName = f"R_{self.info['startR']:.2f}_z_{self.info['startZ']:.2f}.json"
@@ -841,9 +841,9 @@ class Helical(RadDist):
         if setFieldLine:
 
             logger.info(
-                "Building %s radDist | polSigma=%.2f, R=%.2f m, z=%.2f m",
+                "Building %s radDist | sigma_R=%.2f, R=%.2f m, z=%.2f m",
                 self.info["distType"],
-                self.info["polSigma"],
+                self.info["sigma_R"],
                 startR,
                 startZ,
             )
@@ -873,7 +873,7 @@ class Helical(RadDist):
 
         # sigma_target must come from config; fall back to a small offset only
         # if not provided so the intent is explicit rather than a magic number.
-        sigma_target = self.info.get("polSigma", sigma_kernel + 0.01)
+        sigma_target = self.info.get("sigma_R", sigma_kernel + 0.01)
         self.info["sigma_target"] = sigma_target
 
         points, weights = Util_radDist.bivariate_normal_isodensity_points(
@@ -939,7 +939,7 @@ class Helical(RadDist):
             R0_arr,
             z0_arr,
             self.info["weights"].astype(np.float64),
-            float(self.info["polSigma"]),
+            float(self.info["sigma_R"]),
         )
 
         return {emissionName: tot}
@@ -995,7 +995,7 @@ class HelicalRing(RadDist):
 
         # --- Create the field line to trace
         if setFieldLine:
-            str_ = f"→ Building HelicalRing radDist using a polSigma of {self.info['polSigma']:.2f} elongation of {self.info['elongation']:.2f},"
+            str_ = f"→ Building HelicalRing radDist using a sigma_R of {self.info['sigma_R']:.2f} sigma_z of {self.info['sigma_z']:.2f},"
             str_ += f" starting at R = {startR:.2f}m and z = {startZ:.2f}m"
             logger.info("%s", str_)
             self._build_tokamak(
@@ -1095,16 +1095,16 @@ class HelicalRing(RadDist):
                     / (
                         2.0
                         * np.pi
-                        * self.info["elongation"]
-                        * (self.info["polSigma"] ** 2)
+                        * self.info["sigma_z"]
+                        * (self.info["sigma_R"] ** 2)
                     )
                 )
                 * np.exp(
                     -0.5
                     * (perpdist**2)
-                    / (self.info["polSigma"] * self.info["elongation"]) ** 2
+                    / (self.info["sigma_R"] * self.info["sigma_z"]) ** 2
                 )
-                * np.exp(-0.5 * (paralleldist**2) / self.info["polSigma"] ** 2)
+                * np.exp(-0.5 * (paralleldist**2) / self.info["sigma_R"] ** 2)
             )
 
             localEmis[emissionName] = emis.flatten()
@@ -1136,7 +1136,7 @@ class HelicalRing(RadDist):
 class ElongatedRing(RadDist):
     """
     Elongated Ring radDist class used to produce radDist based on the input
-    R, z, polSigma, and elongation.
+    R, z, sigma_R, and sigma_z.
 
     INPUTS:
 
@@ -1161,7 +1161,7 @@ class ElongatedRing(RadDist):
         self.info["distType"] = "elongatedRing"
         self.info["emissionNames"] = ["elongatedRing"]
 
-        if "polSigma" in self.info:
+        if "sigma_R" in self.info:
             self._build_tokamak(
                 tokamakName=self.info["tokamakName"],
                 mode="Build",
@@ -1169,8 +1169,8 @@ class ElongatedRing(RadDist):
                 eqFileName=self.info["eqFileName"],
             )
 
-            str_ = f"→ Building Elongated Ring radDist using a polSigma of {self.info['polSigma']:.2f}"
-            str_ += f", elongation of {self.info['elongation']:.2f}, rotation angle of {self.info['rotationAngle']:.2f}, starting at R = {startR:.2f}m and z = {startZ:.2f}"
+            str_ = f"→ Building Elongated Ring radDist using a sigma_R of {self.info['sigma_R']:.2f}"
+            str_ += f", sigma_z of {self.info['sigma_z']:.2f}, rotation angle of {self.info['rotationAngle']:.2f}, starting at R = {startR:.2f}m and z = {startZ:.2f}"
 
             logger.info("%s", str_)
 
@@ -1201,8 +1201,8 @@ class ElongatedRing(RadDist):
             R0=self.info["startR"],
             z=z,
             z0=self.info["startZ"],
-            elongation=self.info["elongation"],
-            pol_sigma=self.info["polSigma"],
+            sigma_R=self.info["sigma_z"],
+            sigma_z=self.info["sigma_R"],
         )
         return localEmis
 

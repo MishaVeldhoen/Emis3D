@@ -144,7 +144,7 @@ if False:
     config = config_loader(pathFileName)
     if config is None:
         raise FileNotFoundError(f"Could not load config file: {pathFileName}")
-    config["polSigma"] = sigma_kernel
+    config["sigma_R"] = sigma_kernel
     config["numFieldLines"] = n
     rD = radDist.Helical(startR=R0_initial, startZ=z0_initial, config=config)
 

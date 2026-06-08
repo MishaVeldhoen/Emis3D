@@ -13,7 +13,7 @@ Overall radDist creation procedure used in this program:
 1. Create a config file under /inputs/{tokamakName}/{shot}/
 2. This program loads that configuration file
 3. This program creates the R, z grid
-4. This program then loops over the input polSigma and elongation values,
+4. This program then loops over the input sigma_R and sigma_z values,
    creating many radDists within the input/{tokamakName}/radDists/{folder name from config}
 
 
@@ -116,17 +116,17 @@ if __name__ == "__main__":
                 wallcurve=tok.wall["wallcurve"],
             )
 
-    # --- Remove polSigma and elongations from the config file since we don't
+    # --- Remove sigma_R and sigma_z_vals from the config file since we don't
     # need to pass all of them to each radDist
-    polSigmas = config["polSigmas"].copy()
-    elongations = config["elongations"].copy()
+    sigma_R_vals = config["sigma_R_vals"].copy()
+    sigma_z_vals = config["sigma_z_vals"].copy()
     rotationAngles = config["rotationAngles"].copy()
-    del config["polSigmas"], config["elongations"], config["rotationAngles"]
+    del config["sigma_R_vals"], config["sigma_z_vals"], config["rotationAngles"]
 
     if rzArray is not None:
         for rotationAngle in rotationAngles:
-            for elongation in elongations:
-                for polSigma in polSigmas:
+            for sigma_z in sigma_z_vals:
+                for sigma_R in sigma_R_vals:
                     # --- Split the rzArray to conserve memory during the process pool executor,
                     # try to have it split up evenly between the numbe of processors used
                     num_split = 1
@@ -134,15 +134,15 @@ if __name__ == "__main__":
                         num_split = np.floor((rzArray.shape[0] / (numProcessors - 1.0)))
                     rzArray_split = np.array_split(rzArray, num_split)
                     for rz in rzArray_split:
-                        # --- Skip rotation angle if the elongation and polSigma are equal (aka a circle)
+                        # --- Skip rotation angle if the sigma_z and sigma_R are equal (aka a circle)
                         # only do the case where the rotationAngle = 0
-                        if elongation == polSigma and rotationAngle > 0.0:
+                        if sigma_z == sigma_R and rotationAngle > 0.0:
                             pass
                         else:
                             # --- Add stuff to the config, create list of r, z points to solve at
-                            # this elongation and polsigma
-                            config["polSigma"] = polSigma
-                            config["elongation"] = elongation
+                            # this sigma_z and sigma_R
+                            config["sigma_R"] = sigma_R
+                            config["sigma_z"] = sigma_z
                             config["rotationAngle"] = rotationAngle
                             arg_list = [(val, config) for val in rz]
 
