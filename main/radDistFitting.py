@@ -14,7 +14,7 @@ Written by JLH Aug. 2025
 import numpy as np
 from lmfit import Parameters
 from main.Util import load_json, convert_arrays_to_list, find_max_nested_lists
-
+from main.Util_emis3D import loc_tag
 
 class RadDistFitting:
     """
@@ -182,7 +182,7 @@ class RadDistFitting:
         # --- Create parameters for the normal fitting case
         if boloNames is None:
             # --- Create constant multiplication value
-            paramName = f"a_{int(self.info['injectionLocation'])}"
+            paramName = f"a_{loc_tag(self.info['injectionLocation'])}"
             self.fitSynthetic["params"]["paramName"].append(paramName)
             params.add(paramName, value=1.0, min=0)
 
@@ -195,7 +195,7 @@ class RadDistFitting:
 
         # --- Create a peak radiation variable if vary_peak_rad_location is True:
         if vary_peak_rad_location:
-            default_ = int(np.deg2rad(int(self.info["injectionLocation"])))
+            default_ = np.deg2rad(int(self.info["injectionLocation"]))
             paramName = f"peak_rad_loc"
             self.fitSynthetic["params"]["paramName"].append(paramName)
             params.add(
@@ -210,7 +210,7 @@ class RadDistFitting:
         for emissionName in self.info["emissionNames"]:
             paramName = None
             min_ = 0.0
-            paramName = f"b_{emissionName}_{int(self.info['injectionLocation'])}"
+            paramName = f"b_{emissionName}_{loc_tag(self.info['injectionLocation'])}"
             if "clockwise" in emissionName or "counterClock" in emissionName:
                 min_ = 0.0
 

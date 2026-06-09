@@ -108,6 +108,7 @@ class Tokamak(object):
         )
 
         # --- Load the configuration file, if it exists
+        self.info = None
         if os.path.isfile(pathFileName):
             self.info = config_loader(pathFileName)
         else:
@@ -116,7 +117,7 @@ class Tokamak(object):
             )
 
         # --- Create the self.info dict if the file is not loaded
-        if self.info == None:
+        if self.info is None:
             self.info = {}
 
         # Angle conventions used in each tokamak are different from that used in Cherab.
@@ -210,17 +211,15 @@ class Tokamak(object):
                 else:
                     rzarray = None
 
-        # --- Load the wall from the text file
-        elif "wallFileName" in self.info["MACHINE"]:
+        # --- Fall back to the wall text file if the eqFile had no limiter data
+        if rzarray is None and "wallFileName" in self.info["MACHINE"]:
             pathFileName = self.input_dir / self.info["MACHINE"]["wallFileName"]
 
             try:
                 rzarray = np.loadtxt(pathFileName, skiprows=0)
-            except:
+            except ValueError:
                 rzarray = np.loadtxt(pathFileName, delimiter=",", skiprows=0)
 
-        else:
-            self.wall = None
 
         # --- Store the wall information
         if rzarray is not None:
@@ -231,6 +230,8 @@ class Tokamak(object):
             self.wall["minz"] = min(rzarray[:, 1])
             self.wall["maxz"] = max(rzarray[:, 1])
             self.wall["wallcurve"] = path.Path(rzarray)
+        else:
+            self.wall = None
 
     def _build_tokamak(self, load_stl=False) -> None:
         """

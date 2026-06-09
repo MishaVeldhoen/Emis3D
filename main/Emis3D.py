@@ -163,9 +163,9 @@ class Emis3D:
         """
         self._prepare_fits(evalTime=evalTime, crossCalib=crossCalib)
         t_start = time.time()
-        self._minimize_radDists(evalTime=evalTime)
+        self._minimize_radDists(evalTime=evalTime, crossCalib=crossCalib)
         logger.info("Fitting done in %.2f seconds", time.time() - t_start)
-        self._post_process_fit_arrangement(evalTime=evalTime)
+        self._post_process_fit_arrangement(evalTime=evalTime, crossCalib=crossCalib)
         self._post_process_radiation_distribution(evalTime=evalTime)
         self._post_process_calculations(evalTime=evalTime)
 
@@ -831,12 +831,15 @@ class Emis3D:
 
         # --- Check to see if the peak radiation location can be varied
         mu = self.bestFits[evalTime]["synthetic_dict"]["injectionLocation_rad"]
-        if "peak_rad_loc" in self.bestFits[evalTime]["synthetic_dict"]:
-            mu = float(self.bestFits[evalTime]["synthetic_dict"]["peak_rad_loc"])
+
+        if "peak_rad_loc" in params:
+            mu = float(params["peak_rad_loc"])
 
         # This should probably be renamed, but is the value after the underscore
         # the a_ and b_ parameters
-        mu_deg = self.bestFits[evalTime]["synthetic_dict"]["injectionLocation"]
+        mu_tag = Util_emis3D.loc_tag(self.bestFits[evalTime]["synthetic_dict"]["injectionLocation"])
+
+
         numTransits = len(self.bestFits[evalTime]["radDistInfo"]["emissionNames"]) / 2.0
 
         self.bestFits[evalTime]["radiation_distribution"] = {}
@@ -859,8 +862,8 @@ class Emis3D:
 
             # Both directions share amplitude 'a'; their individual decay constant
             # 'b' controls how fast each falls off away from the injection location.
-            a = params[f"a_{mu_deg}"]
-            b = params[f"b_{emissionName}_{mu_deg}"]
+            a = params[f"a_{mu_tag}"]
+            b = params[f"b_{emissionName}_{mu_tag}"]
 
             scale_ = Util_emis3D.scale_wrapper(
                 a=a,
@@ -1230,14 +1233,16 @@ class Emis3D:
             count_ += 1
             ax = f.add_subplot(2, num_columns, count_)
             tok._plot_first_wall(ax)
-            for bolo_ in tok.bolometers:
-                tok._plot_bolometers(ax, boloName)
 
-                # --- Add the radDist plot
-                phi = bolo_.info["CAMERA_POSITION_R_Z_PHI"][2]
-                self.bestFits[evalTime]["radDist"].plotCrossSection(
-                    phi=np.deg2rad(phi), ax=ax
-                )
+            tok._plot_bolometers(ax, boloName)
+            for bolo_ in tok.bolometers:
+                if bolo_.name == boloName:
+                    # --- Add the radDist plot
+                    phi = bolo_.info["CAMERA_POSITION_R_Z_PHI"][2]
+                    self.bestFits[evalTime]["radDist"].plotCrossSection(
+                        phi=np.deg2rad(phi), ax=ax
+                    )
+                    break
             ax.set_title(boloName)
 
         # --- Plot the contour at the injection location
@@ -1260,9 +1265,10 @@ class Emis3D:
 
             # --- Observed data
             ymax = np.nanmax(
-                self.fitData[evalTime]["boloData"][bolo_]
-                + np.abs(self.fitData[evalTime]["boloData_error"][bolo_])
+                np.array(self.fitData[evalTime]["boloData"][bolo_])
+                + np.abs(np.array(self.fitData[evalTime]["boloData_error"][bolo_]))
             )
+            
             ax.errorbar(
                 channels,
                 self.fitData[evalTime]["boloData"][bolo_],

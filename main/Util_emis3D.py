@@ -160,6 +160,10 @@ def find_dphi(
     # --- For non-helical distributions, return the shorter angular distance
     return np.where(ccw <= cw, ccw, -cw)
 
+def loc_tag(injectionLocation) -> str:
+    """Canonical tag for LMFIT parameter names ('a_240', 'b_ ... _ 240', etc.)
+    Float injection locations must be int to agree with the creation"""
+    return str(int(round(float(injectionLocation))))
 
 def residual(
     pars,
@@ -203,10 +207,11 @@ def residual(
                     numRevolutions = synthetic_dict["info"]["numTransists"]
 
         data[emissionName] = {}
+        tag = loc_tag(synthetic_dict['injectionLocation'])
         # --- Get the new scale factor for the normal runs
         if boloNames is None:
             a = params[f"a_{synthetic_dict['injectionLocation']}"]
-            b = params[f"b_{emissionName}_{int(synthetic_dict['injectionLocation'])}"]
+            b = params[f"b_{emissionName}_{tag}"]
 
         # --- Loop over each bolometer group
         for ii in range(len(synthetic_dict[emissionName]["data"])):

@@ -34,14 +34,14 @@ class RadDist(ABC):
     Parent RadDist class.
     """
 
-    def __init__(self, startR=2.96, startZ=0.0, config={}):
+    def __init__(self, startR=2.96, startZ=0.0, config=None):
 
-        self.info = config
+        self.info = dict(config) if config else {}
         self.info["startR"] = startR
         self.info["startZ"] = startZ
-        if "injectionLocation" in config:
-            self.info["startPhi"] = config["injectionLocation"]
-            self.info["startPhiRad"] = np.deg2rad(config["injectionLocation"])
+        if "injectionLocation" in self.info:
+            self.info["startPhi"] = self.info["injectionLocation"]
+            self.info["startPhiRad"] = np.deg2rad(self.info["injectionLocation"])
 
     def _build_tokamak(
         self,
@@ -553,7 +553,7 @@ class RadDist(ABC):
                                             bolo_.etendues_error[jj]
                                             / bolo_.etendues[jj],
                                         )
-                                        * ans
+                                        * radiance
                                     )
                                     if units == "Brightness":
                                         ans = radiance * np.pi

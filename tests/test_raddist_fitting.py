@@ -4,6 +4,9 @@ tests/test_raddist_fitting.py
 Unit tests for main/radDistFitting.py (data mapping / parameter creation)
 and main/Globals.py (path constants).
 No cherab, raysect, or real file I/O required beyond what we fabricate in-memory.
+
+NOTE: TO TEST THIS STUFF, go to the main directory, then type:
+python -m pytest tests/
 """
 
 import json

@@ -104,7 +104,7 @@ def xyz_RPZ(XYZ: np.ndarray, PhiOffset: float = 0.0, Sign: float = 1.0) -> np.nd
 
     rpz = XYZ * 0.0
     rpz[0, :] = np.sqrt(XYZ[0, :] ** 2 + XYZ[1, :] ** 2)
-    rpz[1, :] = Sign * np.arctan2(XYZ[0, :], XYZ[1, :]) + PhiOffset
+    rpz[1, :] = Sign * np.arctan2(XYZ[1, :], XYZ[0, :]) + PhiOffset
     rpz[2, :] = XYZ[2, :]
 
     return rpz
@@ -189,10 +189,10 @@ def rZ_to_theta(r: float, z: float, r0: float = 0.0, z0: float = 0.0) -> float |
     dr = r - r0
     dz = z - z0
 
-    t_ = np.rad2deg(np.arctan(dz / dr))
-
     if dr == 0:
         return 90.0 if dz > 0 else 270.0
+    
+    t_ = np.rad2deg(np.arctan(dz / dr))
 
     if dr < 0:
         if dz > 0:

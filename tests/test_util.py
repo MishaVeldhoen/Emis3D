@@ -118,36 +118,27 @@ class TestRpzXYZ:
 
 
 # ---------------------------------------------------------------------------
-# xyz_RPZ — BUG REGRESSION: arctan2 argument order
+# xyz_RPZ
 # ---------------------------------------------------------------------------
 
 
-class TestXyzRPZPhiBug:
-    """
-    KNOWN BUG: xyz_RPZ computes phi = arctan2(x, y) instead of arctan2(y, x).
-    The standard azimuthal angle is arctan2(y, x).
-
-    These tests document the current (incorrect) behaviour so that a future
-    fix is detectable.  When the bug is fixed, update the assertions to the
-    correct values.
-    """
+class TestXyzRPZPhi:
 
     def test_phi_argument_order_regression(self):
-        """For x=2, y=1 the code returns arctan2(x,y)=63.4° not arctan2(y,x)=26.6°."""
+        """For x=2, y=1 the code returns arctan2(y,x)=26.6°."""
         XYZ = np.array([[2.0], [1.0], [0.0]])
         rpz = xyz_RPZ(XYZ)
         phi_deg = np.rad2deg(rpz[1, 0])
         # Current (buggy) value
-        assert np.isclose(phi_deg, np.rad2deg(np.arctan2(2.0, 1.0)), atol=1e-6), (
-            "Regression: expected arctan2(x,y) = ~63.4°; if this fails the bug was fixed — "
-            "update assertion to arctan2(y,x) = ~26.6°"
+        assert np.isclose(phi_deg, np.rad2deg(np.arctan2(1.0, 2.0)), atol=1e-6), (
+            "xyz_RPZ should return the standard aximuthal angle arctan2(y,x)"
         )
 
-    def test_correct_phi_would_be(self):
-        """Document what the correct answer should be after the fix."""
-        XYZ = np.array([[2.0], [1.0], [0.0]])
-        correct_phi = np.arctan2(XYZ[1, 0], XYZ[0, 0])  # arctan2(y, x)
-        assert np.isclose(np.rad2deg(correct_phi), 26.57, atol=0.01)
+    def test_roundtrip_phi(self):
+        """rpiz_XYZ followed by xyz_RPZ must recover phi as well as R and z."""
+        rpz_in = np.array([[1.5, 2.0], [0.3, 1.1], [-0.5, 0.7]])
+        rpz_out = xyz_RPZ(rpz_XYZ(rpz_in))
+        assert np.allclose(rpz_out, rpz_in, atol=1e-12)
 
 
 # ---------------------------------------------------------------------------
