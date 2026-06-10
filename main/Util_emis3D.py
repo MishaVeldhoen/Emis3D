@@ -210,7 +210,7 @@ def residual(
         tag = loc_tag(synthetic_dict['injectionLocation'])
         # --- Get the new scale factor for the normal runs
         if boloNames is None:
-            a = params[f"a_{synthetic_dict['injectionLocation']}"]
+            a = params[f"a_{tag}"]
             b = params[f"b_{emissionName}_{tag}"]
 
         # --- Loop over each bolometer group

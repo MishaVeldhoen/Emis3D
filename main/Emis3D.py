@@ -92,6 +92,7 @@ from main.Tokamak import Tokamak
 from main.Util import (
     config_loader,
     convert_arrays_to_list,
+    extract_end_numbers,
     find_max_nested_lists,
     get_filenames_in_directory,
     read_h5,
@@ -1252,16 +1253,14 @@ class Emis3D:
         # Bolometers is a list
         for boloGroupName in bolometerGroups:
             count_ += 1
-
             ax = f.add_subplot(2, num_columns, count_)
-
             self._plot_chord_panel(ax, tok, boloGroupName, evalTime)
 
         # --- Plot the contour at the injection location
         count_ += 1
         ax = f.add_subplot(2, num_columns, count_)
         tok._plot_first_wall(ax)
-        phi = self.info.get("injectionLocation", 0)
+        phi = float(self.info.get("injectionLocation", 0))
         self.bestFits[evalTime]["radDist"].plotCrossSection(phi=np.deg2rad(phi), ax=ax)
         ax.set_title(f"Injection location = {phi:.2f} degrees")
 
@@ -1298,7 +1297,6 @@ class Emis3D:
         else:
             plt.show()
 
-
     def _plot_chord_panel(self, ax, tok, boloGroupName: str, evalTime: float) -> None:
         """Plots the first wall, one camera's chords and the radDist cross-section
         at that camera's toroidal location
@@ -1312,15 +1310,15 @@ class Emis3D:
         for bolo_ in tok.bolometers:
             # --- Add the radDist plot
             if bolo_.group_name == boloGroupName:
-                phi = bolo_.info["CAMERA_POSITION_R_Z_PHI"][2]
-                print('Plotting radDist at phi = ', int(phi))
-                self.bestFits[evalTime]["radDist"].plotCrossSection(
-                    phi=np.deg2rad(phi), ax=ax
-                )
+
+                phi = tok.get_ave_bolometer_tor_loc(boloGroupName=bolo_.group_name)
+                if phi is not None:
+                    self.bestFits[evalTime]["radDist"].plotCrossSection(
+                        phi=np.deg2rad(phi), ax=ax
+                    )
                 break
 
         ax.set_title(boloGroupName)
-
 
     def _plot_signal_panel(self, ax, boloName: str, evalTime: float,units_label: str, legend: bool) -> None:
         """Plots the observed signals, each fitted emission componenet, and their
@@ -1332,6 +1330,8 @@ class Emis3D:
         data = np.asarray(self.fitData[evalTime]['boloData'][boloName], dtype=float)
         err = np.asarray(self.fitData[evalTime]['boloData_error'][boloName], dtype=float)
         channels = np.arange(1, data.size + 1)
+        channels = self._channel_numbers(boloName)
+
 
         # --- Mask the dead-channel fit weights for display
         valid = err != DEAD_CHANNEL_ERROR
@@ -1408,6 +1408,29 @@ class Emis3D:
             f"TPF: {self.bestFits[float(evalTime)]['powerPerBin']['total']['toroidal_peaking_factor']:.2f}"
         )
 
+    def _channel_numbers(self, boloName: str) -> np.ndarray:
+        """
+        True channel numbers for a bolometer, taken from the master channel
+        order (self.channel_order) so that channels missing from the data do
+        not shift the numbering. Falls back to 1..N positions for names
+        without trailing digits.
+        """
+        chan_names = None
+        if self.channel_order is not None:
+            for ii, name_ in enumerate(self.channel_order["bolometer_order"]):
+                if name_ == boloName:
+                    chan_names = self.channel_order["channel_list"][ii]
+                    break
+
+        if chan_names is None:
+            chan_names = list(self.data["observed"][boloName]["channelOrder"])
+
+        numbers = []
+        for jj, chan in enumerate(chan_names):
+            num_ = extract_end_numbers(str(chan))
+            numbers.append(int(num_) if num_ is not None else jj + 1)
+
+        return np.array(numbers)
 
 
     # ------------------------------------------------------------------

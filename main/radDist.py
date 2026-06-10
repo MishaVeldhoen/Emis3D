@@ -657,19 +657,6 @@ class RadDist(ABC):
             alpha=0.4,
         )
 
-        """
-        for ii, emissionName in enumerate(self.info["emissionNames"]):
-            ax.text(
-                rarray[loc_[ii][0]],
-                zarray[loc_[ii][1]],
-                emissionName,
-                zorder=1,
-                ha="center",
-                va="center",
-                color="black",
-                weight="bold",
-            )
-        """
 
     def plotOverview(self, return_figure: bool = False, plot_etendue: list = []):
         """

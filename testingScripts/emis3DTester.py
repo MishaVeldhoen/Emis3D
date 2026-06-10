@@ -57,7 +57,11 @@ t = Emis3D(
 )
 
 
-t._perform_fits(evalTime=evalTime)
+t._load_bestFits(path="/Users/plh/Documents/git/Emis3D/inputs/JET/runs/95709/95709_bestFits_50.953.dill")
+
+
+
+
 
 # t._load_bestFits(
 #    path="/Users/plh/Documents/git/Emis3D/inputs/JET/runs/95709/95709_bestFits_50.953.dill"
