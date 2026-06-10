@@ -99,6 +99,20 @@ from main.Util import (
 from main.radDistFitting import RadDistFitting
 from main.radDist import Helical, ElongatedRing, HelicalRing
 
+# --- Fit weight assigned to dead / zero-signal channels so the minmizer ignores
+# them. 
+DEAD_CHANNEL_ERROR = 1.0e4
+
+# --- Plot styling
+PLOT_COLORS = ['green', 'orangered', 'blue', 'cyan', 'magenta']
+PLOT_MARKERS = ['^', 'o', 's', 'D', 'v']
+UNIT_LABELS = {
+    "Power": "[W]",
+    'Radiance': "[W / (m2 sr)]",
+    'Brightness': "[W / m2]"
+}
+
+
 
 class Emis3D:
 
@@ -335,6 +349,7 @@ class Emis3D:
                 list(self.data["observed"][bolo]["channelOrder"])
             )
 
+
     # ------------------------------------------------------------------
     # Fit preparation
     # ------------------------------------------------------------------
@@ -439,7 +454,7 @@ class Emis3D:
                         )
                     err_ = val * err_frac
                 else:
-                    err_ = np.float64(1.0e4)
+                    err_ = np.float64(DEAD_CHANNEL_ERROR)
 
                 temp_e.append(err_)
 
@@ -1198,7 +1213,6 @@ class Emis3D:
     # ------------------------------------------------------------------
     # Plotting
     # ------------------------------------------------------------------
-
     def _plot_bestFit(self, evalTime: float, save: bool = False) -> None:
         """Plots the fit synthetic signal, data, and radDist for the given evalTime."""
         logger.debug(f"→ Plotting the best fit")
@@ -1225,45 +1239,23 @@ class Emis3D:
             loadBolometers=True,
         )
 
-        bolometers = self.info["BOLOMETERS"]
+        bolometerGroups = list(self.info["BOLOMETERS"])
         units = self.bestFits[evalTime]["radDist"].info["units"]
-        units_label = {
-            "Power": "[W]",
-            "Radiance": "[W / (m2 sr)]",
-            "Brightness": "[W / m2]",
-        }.get(units, "[arb]")
+        units_label = UNIT_LABELS.get(units, "[arb]")
 
-        num_columns = len(bolometers) + 1
+
+        num_columns = len(bolometerGroups) + 1
         f = plt.figure(figsize=(15, 8))
 
         # --- Plot the bolometer chords and radDist contour
         count_ = 0
         # Bolometers is a list
-        for boloGroupName in bolometers:
+        for boloGroupName in bolometerGroups:
             count_ += 1
-
-            print(f"Plotting bolometer {boloGroupName}, count {count_}")
 
             ax = f.add_subplot(2, num_columns, count_)
 
-            tok._plot_first_wall(ax)
-            tok._plot_bolometers(ax, boloGroupName)
-
-            # Loop over each bolometer to find one that has the same group name
-            # This is needed to get the phi location
-            for bolo_ in tok.bolometers:
-                
-                # --- Add the radDist plot
-                phi = bolo_.info["CAMERA_POSITION_R_Z_PHI"][2]
-                if bolo_.group_name == boloGroupName:
-                    print('Plotting radDist at phi = ', int(phi))
-                    self.bestFits[evalTime]["radDist"].plotCrossSection(
-                        phi=np.deg2rad(phi), ax=ax
-                    )
-                    break
-
-
-            ax.set_title(boloGroupName)
+            self._plot_chord_panel(ax, tok, boloGroupName, evalTime)
 
         # --- Plot the contour at the injection location
         count_ += 1
@@ -1273,85 +1265,16 @@ class Emis3D:
         self.bestFits[evalTime]["radDist"].plotCrossSection(phi=np.deg2rad(phi), ax=ax)
         ax.set_title(f"Injection location = {phi:.2f} degrees")
 
-        # --- Plot the observed emissivities
-        colors = ["green", "orangered", "blue", "cyan", "magenta"]
-        markers = ["^", "o", "s", "D", "v"]
 
-        for ii, bolo_ in enumerate(bolometers):
+        for bolo_ in bolometerGroups:
             count_ += 1
             ax = f.add_subplot(2, num_columns, count_)
-            numChan = len(self.fitData[evalTime]["boloData"][bolo_])
-            channels = np.arange(1, numChan + 1, 1)
+            self._plot_signal_panel(ax, bolo_, evalTime,units_label,legend=False) 
 
-            # --- Observed data
-            ymax = np.nanmax(
-                np.array(self.fitData[evalTime]["boloData"][bolo_])
-                + np.abs(np.array(self.fitData[evalTime]["boloData_error"][bolo_]))
-            )
-            
-            ax.errorbar(
-                channels,
-                self.fitData[evalTime]["boloData"][bolo_],
-                yerr=self.fitData[evalTime]["boloData_error"][bolo_],
-                marker="s",
-                ms=5,
-                c="black",
-                linestyle="none",
-                label="data",
-            )
-
-            tot_emission = np.zeros(numChan)
-            for jj, emissionName in enumerate(self.bestFits[evalTime]["synthData"]):
-                em_data = np.array(
-                    self.bestFits[evalTime]["synthData"][emissionName][bolo_]
-                )
-                tot_emission += em_data
-
-                ax.plot(
-                    channels,
-                    em_data,
-                    marker=markers[jj % len(markers)],
-                    color=colors[jj % len(colors)],
-                    label=f"{emissionName} emission",
-                )
-
-            ax.plot(
-                channels,
-                tot_emission,
-                color="purple",
-                label="total emission",
-            )
-            if np.nanmax(tot_emission) > ymax:
-                ymax = np.nanmax(tot_emission)
-
-            ax.set_xlabel("Channel Number")
-            ax.set_ylabel(f"Emission {units_label}")
-            ax.set_title(f"{bolo_}")
-            ax.set_ylim(0, float(ymax) * 1.02)
-
-            if ii == 0:
-                ax.legend(fontsize=8)
 
         # --- Plot the radiation behavior
         tpf_ax = f.add_subplot(2, num_columns, count_ + 1)
-        y_data = self.bestFits[evalTime]["powerPerBin"]["total"]["powerPerBin"]
-        scale = np.floor(np.log10(np.nanmax(y_data)))
-        tpf_ax.plot(
-            np.rad2deg(self.bestFits[evalTime]["powerPerBin"]["total"]["phi"]),
-            y_data / 10**scale,
-            color="black",
-            linewidth=2.0,
-        )
-        tpf_ax.set_ylim(
-            np.floor(np.nanmin(y_data / 10**scale)),
-            np.ceil(np.nanmax(y_data / 10**scale)),
-        )
-        tpf_ax.set_xlabel("phi [degrees]")
-        tpf_ax.set_ylabel(f"radiation [$10^{{{int(scale)}}}$ arb]")
-        tpf_ax.set_title(
-            f"time = {evalTime:.4f} ms, "
-            f"TPF: {self.bestFits[float(evalTime)]['powerPerBin']['total']['toroidal_peaking_factor']:.2f}"
-        )
+        self._plot_tpf_panel(tpf_ax, evalTime)
 
         plt.tight_layout()
 
@@ -1374,6 +1297,118 @@ class Emis3D:
 
         else:
             plt.show()
+
+
+    def _plot_chord_panel(self, ax, tok, boloGroupName: str, evalTime: float) -> None:
+        """Plots the first wall, one camera's chords and the radDist cross-section
+        at that camera's toroidal location
+        """
+
+        tok._plot_first_wall(ax)
+        tok._plot_bolometers(ax, boloGroupName)
+
+        # Loop over each bolometer to find one that has the same group name
+        # This is needed to get the phi location
+        for bolo_ in tok.bolometers:
+            # --- Add the radDist plot
+            if bolo_.group_name == boloGroupName:
+                phi = bolo_.info["CAMERA_POSITION_R_Z_PHI"][2]
+                print('Plotting radDist at phi = ', int(phi))
+                self.bestFits[evalTime]["radDist"].plotCrossSection(
+                    phi=np.deg2rad(phi), ax=ax
+                )
+                break
+
+        ax.set_title(boloGroupName)
+
+
+    def _plot_signal_panel(self, ax, boloName: str, evalTime: float,units_label: str, legend: bool) -> None:
+        """Plots the observed signals, each fitted emission componenet, and their
+        total for one bolometer
+        
+        Channels with the DEAD_CHANNEL_ERROR fit weight are excluded from the error bars
+        and y-limit
+        """
+        data = np.asarray(self.fitData[evalTime]['boloData'][boloName], dtype=float)
+        err = np.asarray(self.fitData[evalTime]['boloData_error'][boloName], dtype=float)
+        channels = np.arange(1, data.size + 1)
+
+        # --- Mask the dead-channel fit weights for display
+        valid = err != DEAD_CHANNEL_ERROR
+        plot_err = np.where(valid, err, 0.0)
+
+        ax.errorbar(
+            channels,
+            data, 
+            yerr = plot_err,
+            marker = 's',
+            ms = 5,
+            c = 'black',
+            linestyle = 'none',
+            label = 'data'
+        )
+
+        # --- Fitted emission components and their total
+        tot_emission = np.zeros(data.size)
+        for jj, emissionName in enumerate(self.bestFits[evalTime]["synthData"]):
+            em_data = np.asarray(
+            self.bestFits[evalTime]["synthData"][emissionName][boloName],
+            dtype=float,
+            )
+            tot_emission += em_data
+            ax.plot(
+            channels,
+            em_data,
+            marker=PLOT_MARKERS[jj % len(PLOT_MARKERS)],
+            color=PLOT_COLORS[jj % len(PLOT_COLORS)],
+            label=f"{emissionName} emission",
+            )
+            
+            ax.plot(channels, tot_emission, color="purple", label="total emission")
+            
+        # --- y-limit from valid channels and the synthetic total only
+        dat_ = np.concatenate((data + np.abs(err), tot_emission))
+        ymax = np.nanmax(dat_)
+        if np.any(valid):
+            dat_ = np.concatenate((data[valid] + np.abs(err[valid]), tot_emission[valid]))
+            ymax = np.nanmax(dat_)
+
+        if np.isfinite(ymax) and ymax > 0:
+            ax.set_ylim(0, float(ymax) * 1.02)
+        
+        ax.set_xlabel("Channel Number")
+        ax.set_ylabel(f"Emission {units_label}")
+        ax.set_title(boloName)
+        if legend:
+            ax.legend(fontsize=8)
+
+    def _plot_tpf_panel(self,ax, evalTime:float) -> None:
+        """Plots the toroidal radiation distribution and peaking factor"""
+
+        total_ = self.bestFits[evalTime]["powerPerBin"]["total"]
+        y_data = total_["powerPerBin"]
+        y_max = np.nanmax(y_data)
+        scale = np.floor(np.log10(y_max))
+        y_scaled = y_data / 10**scale
+
+        ax.plot(
+            np.rad2deg(total_["phi"]),
+            y_scaled,
+            color="black",
+            linewidth=2.0,
+        )
+        ax.set_ylim(
+            np.floor(np.nanmin(y_scaled)),
+            np.ceil(np.nanmax(y_scaled)),
+        )
+        ax.set_xlabel("phi [degrees]")
+        ax.set_ylabel(f"radiation [$10^{{{int(scale)}}}$ arb]")
+        ax.set_title(
+            f"time = {evalTime:.4f} ms, "
+            f"TPF: {self.bestFits[float(evalTime)]['powerPerBin']['total']['toroidal_peaking_factor']:.2f}"
+        )
+
+
 
     # ------------------------------------------------------------------
     # Placeholder / future work

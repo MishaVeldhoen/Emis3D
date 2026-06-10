@@ -7,6 +7,7 @@ import json
 import logging
 import os
 
+import re
 import h5py
 import numpy as np
 import yaml
@@ -515,3 +516,13 @@ def compute_etendue_metric(p1, p2) -> float:
     r2, z2 = point3d_to_rz(p2)
 
     return np.sqrt((r1 - r2) ** 2 + (z1 - z2) ** 2)
+
+
+def extract_end_numbers(text):
+    """Returns the numbers at the end of a string, used
+    for plotting routines"""
+    # \d+ matches one or more digits
+    # $ ensures they are at the very end of the string
+    match = re.search(r'\d+$', text)
+    
+    return match.group() if match else None
