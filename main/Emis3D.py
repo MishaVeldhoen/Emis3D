@@ -483,7 +483,7 @@ class Emis3D:
             logger.warning(
                 f"Channels: {radD.info['ERROR CHANNELS']}were not found in the radDist, they will be ignored"
             )
-            logger.debug("-" * 31)
+            logger.warning("-" * 31)
             logger.info("")
 
         logger.debug("→ Preparing synthetic data for fitting")
@@ -1268,7 +1268,7 @@ class Emis3D:
         for bolo_ in bolometerGroups:
             count_ += 1
             ax = f.add_subplot(2, num_columns, count_)
-            self._plot_signal_panel(ax, bolo_, evalTime,units_label,legend=False) 
+            self._plot_signal_panel(ax, bolo_, evalTime,units_label,legend=True) 
 
 
         # --- Plot the radiation behavior
@@ -1364,7 +1364,7 @@ class Emis3D:
             label=f"{emissionName} emission",
             )
             
-            ax.plot(channels, tot_emission, color="purple", label="total emission")
+        ax.plot(channels, tot_emission, color="purple", label="total emission", linewidth = 3.0)
             
         # --- y-limit from valid channels and the synthetic total only
         dat_ = np.concatenate((data + np.abs(err), tot_emission))
