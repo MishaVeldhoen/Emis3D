@@ -165,9 +165,18 @@ class Emis3D:
         t_start = time.time()
         self._minimize_radDists(evalTime=evalTime, crossCalib=crossCalib)
         logger.info("Fitting done in %.2f seconds", time.time() - t_start)
+        t_start = time.time()
         self._post_process_fit_arrangement(evalTime=evalTime, crossCalib=crossCalib)
+
+        print(f"→ Done with fit post-processing step 1 out of 3 in {time.time() - t_start:.2f} seconds")
+        t_start = time.time()
+
         self._post_process_radiation_distribution(evalTime=evalTime)
+        print(f"→ Done with fit post-processing step 2 out of 3 in {time.time() - t_start:.2f} seconds")
+        t_start = time.time()
+
         self._post_process_calculations(evalTime=evalTime)
+        print(f"→ Done with fit post-processing step 3 out of 3 in {time.time() - t_start:.2f} seconds")
 
     # ------------------------------------------------------------------
     # Configuration / data loading
@@ -1229,21 +1238,32 @@ class Emis3D:
 
         # --- Plot the bolometer chords and radDist contour
         count_ = 0
-        for boloName in bolometers:
+        # Bolometers is a list
+        for boloGroupName in bolometers:
             count_ += 1
-            ax = f.add_subplot(2, num_columns, count_)
-            tok._plot_first_wall(ax)
 
-            tok._plot_bolometers(ax, boloName)
+            print(f"Plotting bolometer {boloGroupName}, count {count_}")
+
+            ax = f.add_subplot(2, num_columns, count_)
+
+            tok._plot_first_wall(ax)
+            tok._plot_bolometers(ax, boloGroupName)
+
+            # Loop over each bolometer to find one that has the same group name
+            # This is needed to get the phi location
             for bolo_ in tok.bolometers:
-                if bolo_.name == boloName:
-                    # --- Add the radDist plot
-                    phi = bolo_.info["CAMERA_POSITION_R_Z_PHI"][2]
+                
+                # --- Add the radDist plot
+                phi = bolo_.info["CAMERA_POSITION_R_Z_PHI"][2]
+                if bolo_.group_name == boloGroupName:
+                    print('Plotting radDist at phi = ', int(phi))
                     self.bestFits[evalTime]["radDist"].plotCrossSection(
                         phi=np.deg2rad(phi), ax=ax
                     )
                     break
-            ax.set_title(boloName)
+
+
+            ax.set_title(boloGroupName)
 
         # --- Plot the contour at the injection location
         count_ += 1

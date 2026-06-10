@@ -73,9 +73,17 @@ class Bolometer(object):
                 print(
                     f"Configuration file loaded but missing 'NAME' key: {pathFileName}"
                 )
+            if self.info is not None and "GROUP_NAME" in self.info:
+                self.group_name = self.info["GROUP_NAME"]
+            else:
+                self.group_name = None
+                print(
+                    f"Configuration file loaded but missing 'GROUP_NAME' key: {pathFileName}"
+                )
         else:
             self.info = None
             self.name = None
+            self.group_name = None
             print(
                 f"Could not load the configuration file, file does not exist: {pathFileName}"
             )

@@ -662,8 +662,8 @@ class Tokamak(object):
         label_cherab = True
         for bolo in self.bolometers:
             bolo._change_parent(value=self.world)
-            if bolo.info["GROUP_NAME"] == boloGroupName:
-
+            if bolo.group_name == boloGroupName:
+                print(f'TOK plotting bolo: {bolo.name}')
                 # --- Over plot the chords in the cofig file
                 if plot_chord_info and bolo.info is not None:
                     if "r0" in bolo.info:
