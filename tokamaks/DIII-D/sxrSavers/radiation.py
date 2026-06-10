@@ -683,8 +683,8 @@ class SXRSignal:
             EMIS3D_INPUTS_DIRECTORY, "DIII-D", "sxrData", str(self.info["shotNumber"])
         )
 
-        if not os.path.exists(path):
-            os.makedirs(path)
+
+        os.makedirs(path, exist_ok=True)
 
         fileName = f"{self.info['shotNumber']}_{self.info['arrayName']}_PROCESSED.h5"
         pathFileName = os.path.join(path, fileName)

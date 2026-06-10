@@ -318,8 +318,7 @@ def save_json(obj: Any, pathFileName: Union[str, Path], saveFileName: str) -> No
     """
 
     # --- Create the folder if it doesn't exist
-    if not os.path.exists(pathFileName):
-        os.makedirs(pathFileName)
+    os.makedirs(pathFileName, exist_ok=True)
 
     # --- Save the file
     savePath = os.path.join(pathFileName, saveFileName)
