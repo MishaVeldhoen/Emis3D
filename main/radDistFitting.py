@@ -113,7 +113,8 @@ class RadDistFitting:
                     if chan not in self.data_maps[emissionName]["data"]:
                         if "ERROR CHANNELS" not in self.info:
                             self.info["ERROR CHANNELS"] = ""
-                        self.info["ERROR CHANNELS"] += f"{chan}, "
+                        if chan not in self.info["ERROR CHANNELS"]:
+                            self.info["ERROR CHANNELS"] += f"{chan}, "
 
                     temp_data.append(
                         self.data_maps[emissionName]["data"].get(chan, 0.0)

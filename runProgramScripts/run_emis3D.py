@@ -47,8 +47,8 @@ if __name__ == "__main__":
     # --- Update these parameters:
     evalTimes = [
         50.953,
-        #50.954,
-        #50.955,
+        50.954,
+        50.955,
         #50.9556,
         #50.9569,
         #50.9627,
@@ -85,6 +85,7 @@ if __name__ == "__main__":
                 )
         results = {}
         start_time = time.time()
+        start_time0 = time.time()
         print("→ Preforming fits")
 
         with ThreadPoolExecutor(
@@ -105,11 +106,16 @@ if __name__ == "__main__":
                 t.fits[evalTime]["chiSqVec"][ii] = float(fit_result.chisqr.item())
 
         # --- Preform post-processing
+        start_time = time.time()
         t._post_process_fit_arrangement(evalTime=evalTime)
         t._post_process_radiation_distribution(evalTime=evalTime)
         t._post_process_calculations(evalTime=evalTime)
+        print(f"→ Done with postprocessing in {time.time() - start_time:.2f} seconds")
+        start_time = time.time()
         t._cleanup_fits(evalTime=evalTime)  # to save memory
         t._plot_bestFit(evalTime=evalTime, save=True)
+        print(f"→ Program completed for evalTime {evalTime:.4f} in {time.time() - start_time0:.2f} seconds\n")
 
     # --- Save the best fits and the fit data after everything is done
     t._save_bestFits()
+    

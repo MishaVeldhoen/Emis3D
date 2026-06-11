@@ -176,22 +176,25 @@ class Emis3D:
         crossCalib : Flag to tell the program to find the calibration
                      factor between bolometers during the CQ
         """
+
+        # Added a bunch of timing flags, to see where improvement can be made
         self._prepare_fits(evalTime=evalTime, crossCalib=crossCalib)
         t_start = time.time()
+
         self._minimize_radDists(evalTime=evalTime, crossCalib=crossCalib)
-        logger.info("Fitting done in %.2f seconds", time.time() - t_start)
+        logger.info(f"→ Fitting done in {time.time() - t_start:.2f} seconds")
         t_start = time.time()
         self._post_process_fit_arrangement(evalTime=evalTime, crossCalib=crossCalib)
 
-        print(f"→ Done with fit post-processing step 1 out of 3 in {time.time() - t_start:.2f} seconds")
+        logger.info(f"→ Done with fit post-processing step 1 out of 3 in {time.time() - t_start:.2f} seconds")
         t_start = time.time()
 
         self._post_process_radiation_distribution(evalTime=evalTime)
-        print(f"→ Done with fit post-processing step 2 out of 3 in {time.time() - t_start:.2f} seconds")
+        logger.info(f"→ Done with fit post-processing step 2 out of 3 in {time.time() - t_start:.2f} seconds")
         t_start = time.time()
 
         self._post_process_calculations(evalTime=evalTime)
-        print(f"→ Done with fit post-processing step 3 out of 3 in {time.time() - t_start:.2f} seconds")
+        logger.info(f"→ Done with fit post-processing step 3 out of 3 in {time.time() - t_start:.2f} seconds")
 
     # ------------------------------------------------------------------
     # Configuration / data loading
@@ -483,7 +486,7 @@ class Emis3D:
             logger.warning(
                 f"Channels: {radD.info['ERROR CHANNELS']}were not found in the radDist, they will be ignored"
             )
-            logger.warning("-" * 31)
+            logger.warning("-" * 31 + '\n')
             logger.info("")
 
         logger.debug("→ Preparing synthetic data for fitting")
@@ -768,9 +771,10 @@ class Emis3D:
         bestFitID = np.array(self.fits[evalTime]["chiSqVec"]).argmin().item()
 
         # --- Print the results of the best fit
-        logger.info("")
+        print("\n-----------Best Fit-----------")
         report_fit(self.fits[evalTime][bestFitID]["fit"])
-        logger.info("")
+        print("------------------------------\n")
+
 
         # --- Store the best fit
         if not hasattr(self, "bestFits"):
