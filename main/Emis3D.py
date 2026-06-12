@@ -731,10 +731,12 @@ class Emis3D:
             radDist_ = Helical(
                 config=rad_.info, startR=rad_.info["startR"], startZ=rad_.info["startZ"]
             )
+
         elif info["distType"].lower() == "elongatedring":
             radDist_ = ElongatedRing(config=rad_.info)
         elif info["distType"].lower() == "helicalring":
-            radDist_ = HelicalRing(config=rad_.info)
+            radDist_ = HelicalRing(config=rad_.info, startR=rad_.info["startR"], startZ=rad_.info["startZ"]
+            )
         else:
             logger.info(
                 f"_rebuild_radDist() only supports Helical, ElongatedRing, or HelicalRing"
@@ -757,7 +759,7 @@ class Emis3D:
         )
 
         # --- Build the field line, if it is a helical distribution
-        if isinstance(radDist_, Helical):
+        if isinstance(radDist_, Helical) or isinstance(radDist_, HelicalRing):
             radDist_.setFieldLine()
 
         return radDist_
