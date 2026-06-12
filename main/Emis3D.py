@@ -1333,7 +1333,6 @@ class Emis3D:
         """
         data = np.asarray(self.fitData[evalTime]['boloData'][boloName], dtype=float)
         err = np.asarray(self.fitData[evalTime]['boloData_error'][boloName], dtype=float)
-        channels = np.arange(1, data.size + 1)
         channels = self._channel_numbers(boloName)
 
 
