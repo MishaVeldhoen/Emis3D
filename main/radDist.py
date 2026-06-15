@@ -1190,6 +1190,7 @@ class ElongatedRing(RadDist):
             z0=self.info["startZ"],
             sigma_R=self.info["sigma_R"],
             sigma_z=self.info["sigma_z"],
+            theta=self.info['rotationAngle']
         )
         return localEmis
 

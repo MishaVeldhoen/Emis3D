@@ -138,6 +138,9 @@ if __name__ == "__main__":
                         # only do the case where the rotationAngle = 0
                         if sigma_z == sigma_R and rotationAngle > 0.0:
                             pass
+                        # --- Skip where sigma_z is a sigma_R value for rotationAngle 90
+                        if rotationAngle == 90 and sigma_z in sigma_R_vals:
+                            pass
                         else:
                             # --- Add stuff to the config, create list of r, z points to solve at
                             # this sigma_z and sigma_R

@@ -47,10 +47,10 @@ if __name__ == "__main__":
     # --- Update these parameters:
     evalTimes = [
         #50.953,
-        50.949,
+        #50.95,
         #50.955,
         #50.9556,
-        #50.9569,
+        50.9569,
         #50.9627,
     ]
     tokamakName = "JET"

@@ -35,7 +35,7 @@ evalTime = 50.954
 
 tokamakName = "JET"
 runConfigName = "95709/95709_runConfig.yaml"
-configFileName = "helical_config.yaml"  
+configFileName = "elongatedRing_config.yaml"  
 verbose = True
 rzvalues = [3.2, 1.3]
 
@@ -65,11 +65,11 @@ if config is None:
 rzArray = np.array([rzvalues[0], rzvalues[1]])
 
 if "sigma_R_vals" in config:
-    config["sigma_R"] = 0.1 #config["sigma_R_vals"][0]
+    config["sigma_R"] = config["sigma_R_vals"][0]
 if "sigma_z_vals" in config:
-    config["sigma_z"] = 0.001 # config["sigma_z_vals"][0]
+    config["sigma_z"] = config["sigma_z_vals"][0]
 if "rotationAngles" in config:
-    config["rotationAngle"] = 0 #config["rotationAngles"][0]
+    config["rotationAngle"] = config["rotationAngles"][0]
 arg_list = (rzArray, config)
 
 
