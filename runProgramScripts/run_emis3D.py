@@ -109,7 +109,6 @@ if __name__ == "__main__":
         # --- Preform post-processing
         start_time = time.time()
         t._post_process_fit_arrangement(evalTime=evalTime)
-        t._post_process_radiation_distribution(evalTime=evalTime)
         t._post_process_calculations(evalTime=evalTime)
         print(f"→ Done with postprocessing in {time.time() - start_time:.2f} seconds")
         start_time = time.time()

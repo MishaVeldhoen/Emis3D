@@ -39,25 +39,14 @@ def scale_linear(
     """
     Triangular profile centered at mu.
 
-    Peak = B at dphi = 0.
+    Peak = A at dphi = 0.
     """
-    return B - np.abs(A) * dphi
+    return A - np.abs(B) * dphi
 
 
 def scale_constant(A: float, dphi: np.ndarray) -> np.ndarray:
     return A * np.ones(dphi.shape[0])
 
-
-def von_mises_amplitude(A: float, B: float, dphi: np.ndarray) -> np.ndarray:
-    """
-    Apply scaling to Von Mises distribution, while ensuring that the
-    endpoints are equal.
-
-    left : theta-mu in (-pi, 0], counterClock
-    right : theta-mu in (0, pi], clockwise
-    """
-
-    return A * np.exp(B * (np.cos(dphi) - 1.0))
 
 
 def scale_wrapper(
@@ -97,8 +86,6 @@ def scale_wrapper(
         return scale_linear(a, b, dphi)
     elif scale_def == "constant":
         return scale_constant(a, dphi)
-    elif scale_def == "von_mises":
-        return von_mises_amplitude(a, b, dphi)
     else:
         return np.ones(dphi.shape[0])
 
@@ -193,6 +180,7 @@ def loc_tag(injectionLocation) -> str:
     """Canonical tag for LMFIT parameter names ('a_240', 'b_ ... _ 240', etc.)
     Float injection locations must be int to agree with the creation"""
     return str(int(round(float(injectionLocation))))
+
 
 def residual(
     pars,
@@ -347,6 +335,7 @@ def error_constant(
     signal = np.clip(signal, _floor, None)
     
     return fraction * max_signal / signal
+
 
 def error_exponential(
     signal: np.ndarray,

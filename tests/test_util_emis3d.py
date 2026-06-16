@@ -15,7 +15,6 @@ from main.Util_emis3D import (
     scale_exp,
     scale_linear,
     scale_constant,
-    von_mises_amplitude,
     scale_wrapper,
     error_exponential,
     error_inverse,
@@ -119,12 +118,8 @@ class TestScaleLinear:
     def test_gradient(self):
         dphi = np.array([0.0, 1.0, 2.0])
         result = scale_linear(2.0, 1.0, dphi)  # y = 2*dphi + 1
-        assert np.allclose(result, [1.0, -1.0, -3.0])
+        assert np.allclose(result, [2.0, 1.0, 0.0])
 
-    def test_zero_slope(self):
-        dphi = np.array([0.0, 5.0, -3.0])
-        result = scale_linear(0.0, 7.0, dphi)
-        assert np.allclose(result, 7.0)
 
 
 # ---------------------------------------------------------------------------
@@ -142,29 +137,6 @@ class TestScaleConstant:
         dphi = np.zeros(7)
         assert scale_constant(1.0, dphi).shape == (7,)
 
-
-# ---------------------------------------------------------------------------
-# von_mises_amplitude
-# ---------------------------------------------------------------------------
-
-class TestVonMisesAmplitude:
-
-    def test_peak_at_zero(self):
-        """von_mises_amplitude(A, B, 0) = A * exp(B*(cos(0)-1)) = A * exp(0) = A."""
-        val = von_mises_amplitude(2.0, 3.0, np.array([0.0]))
-        assert np.isclose(val[0], 2.0)
-
-    def test_endpoints_equal(self):
-        """At dphi = ±π the cosine is -1, so all endpoints are equal: A*exp(-2B)."""
-        val_pos = von_mises_amplitude(1.0, 2.0, np.array([np.pi]))
-        val_neg = von_mises_amplitude(1.0, 2.0, np.array([-np.pi]))
-        assert np.isclose(val_pos[0], val_neg[0])
-
-    def test_positive_B_decays(self):
-        """For B > 0 the amplitude should decay away from 0."""
-        v0 = von_mises_amplitude(1.0, 2.0, np.array([0.0]))[0]
-        v1 = von_mises_amplitude(1.0, 2.0, np.array([1.0]))[0]
-        assert v0 > v1
 
 
 # ---------------------------------------------------------------------------

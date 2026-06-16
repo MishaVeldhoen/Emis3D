@@ -61,7 +61,7 @@ TODO:
 see _combine_synthetics_for_fits as a older starting point
 2. Give the user the option to use the new error technique or use the error from the data
 3. Double check field line tracer with output from MOFAT
-
+4. Add checker to account for different phi values when calculating the total power in _post_process_calculations
 
 Biggest Issues:
 1. Find good radDist functions that represent what is going on
@@ -186,15 +186,11 @@ class Emis3D:
         t_start = time.time()
         self._post_process_fit_arrangement(evalTime=evalTime, crossCalib=crossCalib)
 
-        logger.info(f"→ Done with fit post-processing step 1 out of 3 in {time.time() - t_start:.2f} seconds")
-        t_start = time.time()
-
-        self._post_process_radiation_distribution(evalTime=evalTime)
-        logger.info(f"→ Done with fit post-processing step 2 out of 3 in {time.time() - t_start:.2f} seconds")
+        logger.info(f"→ Done with fit post-processing step 1 out of 2 in {time.time() - t_start:.2f} seconds")
         t_start = time.time()
 
         self._post_process_calculations(evalTime=evalTime)
-        logger.info(f"→ Done with fit post-processing step 3 out of 3 in {time.time() - t_start:.2f} seconds")
+        logger.info(f"→ Done with fit post-processing step 2 out of 2 in {time.time() - t_start:.2f} seconds")
 
     # ------------------------------------------------------------------
     # Configuration / data loading
@@ -699,6 +695,17 @@ class Emis3D:
     # Post-processing
     # ------------------------------------------------------------------
 
+    def _bestFit_radDist_parameters(self, evalTime:float, emissionName: str) -> tuple[np.ndarray, np.ndarray]:
+        """Finds the starting and ending phi for a given radDist"""
+        phi = self.bestFits[evalTime]['radDist'].data['toroidalRadiatedPower'][emissionName]['phi_array']
+        P_pol = self.bestFits[evalTime]['radDist'].data['toroidalRadiatedPower'][emissionName]['P_pol']
+        return np.array(phi), np.array(P_pol)
+
+    def _bestFit_radDist_scaling(self, evalTime: float, emissionName: str) -> float:
+        """Returns the pre-fit synthetic / data normalization factor"""
+        norm_factor= self.bestFits[evalTime]['synthetic_dict'][emissionName]['scaleSynth']
+        return norm_factor
+
     def _rebuild_radDist(
         self,
         evalTime: float,
@@ -851,120 +858,6 @@ class Emis3D:
             bestFit=True,
         )
 
-    def _post_process_radiation_distribution(self, evalTime: float) -> None:
-        """Calculates the radiation amplitude distribution from the best fit"""
-
-        if self.info is None:
-            return
-
-        scale_def = self.info["scale_def"]
-        params = self.bestFits[evalTime]["fit"].params.valuesdict()
-
-        # --- Check to see if the peak radiation location can be varied
-        mu = self.bestFits[evalTime]["synthetic_dict"]["injectionLocation_rad"]
-
-        if "peak_rad_loc" in params:
-            mu = float(params["peak_rad_loc"])
-
-        # This should probably be renamed, but is the value after the underscore
-        # the a_ and b_ parameters
-        mu_tag = Util_emis3D.loc_tag(self.bestFits[evalTime]["synthetic_dict"]["injectionLocation"])
-
-
-        numTransits = len(self.bestFits[evalTime]["radDistInfo"]["emissionNames"]) / 2.0
-
-        self.bestFits[evalTime]["radiation_distribution"] = {}
-        rad_distribution = self.bestFits[evalTime]["radiation_distribution"]
-
-        emissionNames = self.bestFits[evalTime]["synthetic_dict"]["emissionNames"]
-
-        # --- Lists to fit the whole radiation distribution too
-        # Shared output grid: clean [0, 2π] at 500 points.
-        # All components are summed here so rad_distribution["total"] needs no
-        # further wrapping in _post_process_calculations.
-        phi_grid = np.linspace(0, 2.0 * np.pi, 500)
-        amp_total = np.zeros_like(phi_grid)
-
-        for emissionName in emissionNames:
-
-            # --- Fit assumed phi - mu = 0, aka center is on the injection location
-            dphi = np.linspace(-np.pi, np.pi, 500)
-            rad_distribution[emissionName] = {}
-
-            # Both directions share amplitude 'a'; their individual decay constant
-            # 'b' controls how fast each falls off away from the injection location.
-            a = params[f"a_{mu_tag}"]
-            b = params[f"b_{emissionName}_{mu_tag}"]
-
-            scale_ = Util_emis3D.scale_wrapper(
-                a=a,
-                b=b,
-                phi=np.zeros(1),
-                dphi=dphi,
-                mu=0.0,
-                scale_def=scale_def,
-                emissionName=emissionName,
-            )
-
-            if "clockwise" in emissionName:
-                # CW half:  [-π, 0]  → [-2π·N, 0], for helicals
-                loc_ = (dphi > -np.pi) & (
-                    dphi <= 0
-                )  # CW:  exclude the "arrival" endpoint
-                # Scale back up to 2 pi since the helical distribution is a full revolutions
-                dphi_scale = 2.0 * numTransits
-            elif "counterClock" in emissionName:
-                # CCW half: (0,  π]  → (0, 2π·N], for helicals
-                loc_ = (dphi > 0) & (
-                    dphi < np.pi
-                )  # CCW: exclude the "arrival" endpoint
-                dphi_scale = 2.0 * numTransits
-            else:
-                loc_ = np.full(dphi.shape[0], fill_value=True)
-                dphi_scale = 1.0
-
-            phi_unwrapped = dphi[loc_] * dphi_scale + mu
-            amplitude_ = scale_[loc_]
-
-            # Sort the unwrapped domain once for use in both the alias loop and
-            # the per-emission wrapped storage below.
-            sort_uw = np.argsort(phi_unwrapped)
-            phi_uw_sorted = phi_unwrapped[sort_uw]
-            amp_uw_sorted = amplitude_[sort_uw]
-            x_min_em = phi_uw_sorted[0]
-            x_max_em = phi_uw_sorted[-1]
-
-            # --- Alias summation onto the shared [0, 2π] grid -------------------
-            # For numTransits = 1 each angle has exactly one alias per component.
-            # For numTransits = N > 1 there are N aliases and they all contribute.
-            for ii, theta in enumerate(phi_grid):
-                k_lo = int(np.ceil((x_min_em - theta) / (2.0 * np.pi)))
-                k_hi = int(np.floor((x_max_em - theta) / (2.0 * np.pi)))
-                if k_lo > k_hi:
-                    continue
-                x_aliases = theta + 2.0 * np.pi * np.arange(k_lo, k_hi + 1)
-                x_aliases = x_aliases[(x_aliases >= x_min_em) & (x_aliases <= x_max_em)]
-                if x_aliases.size > 0:
-                    amp_total[ii] += np.sum(
-                        np.interp(x_aliases, phi_uw_sorted, amp_uw_sorted)
-                    )
-            # ---------------------------------------------------------------------
-
-            # Per-emission diagnostics (individual plotting, left-handed angle, etc.)
-            phi_wrapped_em = np.mod(phi_unwrapped, 2.0 * np.pi)
-            sort_w = np.argsort(phi_wrapped_em)
-
-            rad_distribution[emissionName]["phi"] = phi_wrapped_em[sort_w]
-            rad_distribution[emissionName]["amplitude"] = amplitude_[sort_w]
-            rad_distribution[emissionName]["phi_unwrapped"] = phi_unwrapped
-            rad_distribution[emissionName]["amplitude_unwrapped"] = amplitude_
-            rad_distribution[emissionName]["phi_left_handed_deg"] = np.rad2deg(
-                2.0 * np.pi - phi_wrapped_em[sort_w]
-            )
-
-        # Already a clean, monotone [0, 2π] grid — no wrapping needed downstream.
-        rad_distribution["total"] = {"phi": phi_grid, "amp": amp_total}
-
     def _post_process_calculations(self, evalTime: float) -> None:
         """
         Rebuild radDist, calculate powerPerBin, and compute the toroidal
@@ -979,172 +872,77 @@ class Emis3D:
             )
             return
 
-        # --- Shorten some variable calls
-        radDist_ = self.bestFits[evalTime]["radDist"]
+
+        if self.info is None:
+            raise AttributeError("Self.info should not be none!")
+
+        # --- Create an empty dictionary
+        self.bestFits[evalTime]["radiation_distribution"] = {}
         rad_distribution = self.bestFits[evalTime]["radiation_distribution"]
-        emissionNames = radDist_.info["emissionNames"]
+        emissionNames = self.bestFits[evalTime]["synthetic_dict"]["emissionNames"]
 
-        self.bestFits[evalTime]["powerPerBin"] = {}
-        powerPerBin = self.bestFits[evalTime]["powerPerBin"]
+        scale_def = self.info["scale_def"]
+        params = self.bestFits[evalTime]["fit"].params.valuesdict()
 
+        # --- Check to see if the peak radiation location can be varied
         mu = self.bestFits[evalTime]["synthetic_dict"]["injectionLocation_rad"]
+        if "peak_rad_loc" in params:
+            mu = float(params["peak_rad_loc"])
 
-        x_all = []
-        y_all = []
+        # Value at the end of each tag in params
+        inj_loc_tag = Util_emis3D.loc_tag(self.bestFits[evalTime]["synthetic_dict"]["injectionLocation"])
 
-        # Use the first emission name once to get the synthetic scale factor
-        # (it is the same for all emissionNames).
-        first_emission = emissionNames[0]
-        scale_synth = self.bestFits[evalTime]["synthetic_dict"][first_emission][
-            "scaleSynth"
-        ]
 
-        # --- Unwrap and combine the powerPerBin for both radiation distribution functions
         for emissionName in emissionNames:
-            powerPerBin[emissionName] = {}
-            phibin_center = radDist_.data["toroidalRadiatedPower"][emissionName][
-                "phi_array"
-            ]
-            ppb_amp = radDist_.data["toroidalRadiatedPower"][emissionName]["P_pol"]
+            rad_distribution[emissionName] = {}
 
-            # --- elongatedRing distributions are symmetric, so we can skip a lot of this
-            if emissionName == "elongatedRing":
-                # Symmetric: extend with a constant to avoid interpolation artifacts
-                y_ = np.mean(ppb_amp)
-                x_all.extend(np.linspace(0, 2.0 * np.pi, 20))
-                y_all.extend(np.full(20, fill_value=y_))
+            # Find the phi limits that the radDist was created with
+            rD_phi, rD_P_pol = self._bestFit_radDist_parameters(evalTime, emissionName)
+            rD_scale = self._bestFit_radDist_scaling(evalTime, emissionName)
+
+            # Create total power arrays
+            if 'phi' not in rad_distribution:
+                rad_distribution['phi'] = rD_phi
+                rad_distribution['total_power'] = np.zeros(rD_phi.shape)
             else:
-                # --- Unwrap the powerPerBin
-                dphi = phibin_center - mu
+                # Checker to make sure that phi arrays match when doing helical distributions
+                # (or more than one injection location)
+                if rD_phi != rad_distribution['phi']:
+                    raise ValueError("Error! PHI arrays do not match in _post_process_calculations")
 
-                # --- Determine the offset
-                offset = 0.0
-                if "rev" in emissionName:
-                    offset = int(emissionName[-1]) * 2.0 * np.pi
+            # dphi already accounts for _rev1, _rev2, etc. for helical distributions
+            dphi = Util_emis3D.find_dphi(rD_phi, mu, emissionName=emissionName)
 
-                # --- Remove the data point at dphi = 0, it is always wrong for some reason
-                indx = np.abs(dphi).argmin()
-                dphi = np.delete(dphi, indx)
-                ppb_amp = np.delete(ppb_amp, indx)
+            # Both directions share amplitude 'a'; their individual decay constant
+            # 'b' controls how fast each falls off away from the injection location.
+            a = params[f"a_{inj_loc_tag}"]
+            b = params[f"b_{emissionName}_{inj_loc_tag}"]
 
-                # BUG: Here? CW negative flipped to negative twice?
-                if "counterClock" in emissionName:
-                    dphi[dphi <= 0] += 2.0 * np.pi
-                elif "clockwise" in emissionName:
-                    dphi[dphi > 0] -= 2.0 * np.pi
-
-                # --- Arrange the data in ascending order
-                sort_ = np.argsort(dphi)
-                # dphi_ = dphi[sort_] + mu + offset
-
-                # --- Clockwise data should be negative
-                if "clockwise" in emissionName:
-                    dphi_ = dphi[sort_] + mu + offset
-                    # OLD: dpi_ *= -1
-                else:
-                    dphi_ = dphi[sort_] + mu + offset
-
-                # --- Add mu back, then put it in the master array
-                x_all.extend(dphi_)
-                y_all.extend(ppb_amp[sort_])
-
-        # --- Arrange the data in ascending order
-        sort_ = np.argsort(np.array(x_all))
-        x_all_ppb = np.array(x_all)[sort_]
-        y_all_ppb = np.array(y_all)[sort_]
-
-        # --- Perform fits on the data
-        x_min, x_max = x_all_ppb[0], x_all_ppb[-1]
-        phi_ = np.linspace(x_min, x_max, 500)
-        ppb_fit = np.interp(phi_, x_all_ppb, y_all_ppb)
-
-        # --- Fit the radiation distribution
-        x_pts = np.array(rad_distribution["total"]["phi"])
-        y_pts = np.array(rad_distribution["total"]["amp"])
-        y_rad_distr = np.interp(phi_ % (2.0 * np.pi), x_pts, y_pts)
-        ppb_total = scale_synth * ppb_fit * y_rad_distr
-
-        # Wrap back to [0, 2π]
-        phi_wrapped = np.linspace(0, 2.0 * np.pi, 360)
-        ppb_total_wrapped = np.zeros(phi_wrapped.shape[0])
-
-        for ii, theta in enumerate(phi_wrapped):
-            ks = np.arange(
-                (x_min - theta) // (2.0 * np.pi),
-                (x_max - theta) // (2.0 * np.pi) + 1,
+            scale_ = Util_emis3D.scale_wrapper(
+                a=a,
+                b=b,
+                phi=rD_phi,
+                dphi=dphi,
+                mu=mu,
+                scale_def=scale_def,
+                emissionName=emissionName,
             )
-            x_vals = theta + 2.0 * np.pi * ks
-            x_vals = x_vals[(x_vals >= x_min) & (x_vals <= x_max)]
-            ppb_total_wrapped[ii] = np.sum(np.interp(x_vals, phi_, ppb_total))
 
-        is_elongated = emissionNames == ["elongatedRing"] or (
-            len(emissionNames) == 1 and emissionNames[0] == "elongatedRing"
-        )
-        if is_elongated:
-            phi_wrapped = phi_
-            ppb_total_wrapped = ppb_total
+            # --- Now calculate the radiation around the vessel due to the radDist
+            rD_power = rD_P_pol * scale_ * rD_scale
+            
+            rad_distribution[emissionName]["phi"] = np.asarray(rD_phi)
+            rad_distribution[emissionName]["multiplication_factor"] = np.asarray(scale_)
+            rad_distribution[emissionName]["total_power"] = np.asarray(rD_power)
+            rad_distribution['total_power'] += rD_power
 
-        powerPerBin["total"] = {
-            "phi_unwrapped": phi_,
-            "powerPerBin_unwrapped": ppb_total,
-            "phi": phi_wrapped,
-            "powerPerBin": ppb_total_wrapped,
-            "toroidal_peaking_factor": (
-                np.max(ppb_total_wrapped)
-                / (simpson(ppb_total_wrapped, x=phi_wrapped) / (2.0 * np.pi))
-            ),
-        }
+        rad_distribution['peak_emission'] = mu
+        
+        tp = rad_distribution['total_power']
+        tpf = np.max(tp) / (simpson(tp, x = rad_distribution['phi']) / (2.0 * np.pi))
+        rad_distribution['toroidal_peaking_factor'] = tpf
 
-        """
-        # OLD
-        # --- Wrap the distribution if it is only from -pi to pi
-        if np.max(x_pts) - np.min(x_pts) == 2.0 * np.pi:
-            x_pts = x_pts % (2.0 * np.pi)
-            s_ = np.argsort(x_pts)
-            x_pts = x_pts[s_]
-            y_pts = y_pts[s_]
 
-        y_rad_distr = np.interp(phi_, x_pts, y_pts)
-        ppb_total = scale_synth * ppb_fit * y_rad_distr
-
-        # --- Wrap back to [0, 360]
-        phi_wrapped = np.linspace(0, 2.0 * np.pi, 360)
-        ppb_total_wrapped = np.zeros(phi_wrapped.shape[0])
-
-        # --- Find all the equivilent data within the range
-        for ii, theta in enumerate(phi_wrapped):
-            ks = np.arange(
-                (x_min - theta) // (2.0 * np.pi),
-                (x_max - theta) // (2.0 * np.pi) + 1,
-            )
-            x_vals = theta + 2.0 * np.pi * ks
-
-            # --- Keep only the values within the range
-            x_vals = x_vals[(x_vals >= x_min) & (x_vals <= x_max)]
-
-            ppb_total_wrapped[ii] = np.sum(np.interp(x_vals, phi_, ppb_total))
-
-        # --- Something funky happens with the elongatedRing distribution when they
-        # are wrapped, so just keep the unwrapped version
-        is_elongated = emissionNames == ["elongatedRing"] or (
-            len(emissionNames) == 1 and emissionNames[0] == "elongatedRing"
-        )
-        if is_elongated:
-            phi_wrapped = phi_
-            ppb_total_wrapped = ppb_total
-
-        # --- Store the results
-        powerPerBin["total"] = {
-            "phi_unwrapped": phi_,
-            "powerPerBin_unwrapped": ppb_total,
-            "phi": phi_wrapped,
-            "powerPerBin": ppb_total_wrapped,
-            "toroidal_peaking_factor": (
-                np.max(ppb_total_wrapped)
-                / (simpson(ppb_total_wrapped, x=phi_wrapped) / (2.0 * np.pi))
-            ),
-        }
-        """
 
     # ------------------------------------------------------------------
     # Cleanup / persistence
@@ -1181,9 +979,9 @@ class Emis3D:
         if len(keys) > 1:
             t_min = np.min(keys)
             t_max = np.max(keys)
-            filename = f"{self.info['shot']}_bestFits_{t_min:.3f}_to_{t_max:.3f}.dill"
+            filename = f"{self.info['shot']}_bestFits_{t_min:.4f}_to_{t_max:.4f}.dill"
         else:
-            filename = f"{self.info['shot']}_bestFits_{keys[0]:.3f}.dill"
+            filename = f"{self.info['shot']}_bestFits_{keys[0]:.4f}.dill"
 
         pathFileName = (
             EMIS3D_INPUTS_DIRECTORY
@@ -1390,14 +1188,15 @@ class Emis3D:
     def _plot_tpf_panel(self,ax, evalTime:float) -> None:
         """Plots the toroidal radiation distribution and peaking factor"""
 
-        total_ = self.bestFits[evalTime]["powerPerBin"]["total"]
-        y_data = total_["powerPerBin"]
+        rad_distribution = self.bestFits[evalTime]["radiation_distribution"]
+
+        y_data = rad_distribution['total_power']
         y_max = np.nanmax(y_data)
         scale = np.floor(np.log10(y_max))
         y_scaled = y_data / 10**scale
 
         ax.plot(
-            np.rad2deg(total_["phi"]),
+            np.rad2deg(rad_distribution["phi"]),
             y_scaled,
             color="black",
             linewidth=2.0,
@@ -1406,11 +1205,31 @@ class Emis3D:
             np.floor(np.nanmin(y_scaled)),
             np.ceil(np.nanmax(y_scaled)),
         )
+        ax.axvline(np.rad2deg(rad_distribution['peak_emission']),
+                   np.floor(np.nanmin(y_scaled)),
+                   np.ceil(np.nanmax(y_scaled)),
+                   linestyle = 'dashed', color = 'tab:red')
+        ax.text(np.rad2deg(rad_distribution['peak_emission']),
+                np.floor(np.nanmin(y_scaled)) * 1.1,
+                'Peak\nradiation',
+                ha = 'center', va = 'bottom', size = 10
+                )
+        if self.info is not None:
+            ax.axvline(np.deg2rad(self.info['injectionLocation']),
+                    np.floor(np.nanmin(y_scaled)),
+                    np.ceil(np.nanmax(y_scaled)),
+                    linestyle = 'dashed', color = 'tab:blue')
+            ax.text(np.deg2rad(self.info['injectionLocation']),
+                    np.floor(np.nanmin(y_scaled)) * 1.1,
+                    'Injection\nlocation',
+                    ha = 'center', va = 'bottom', size = 10
+                    )
+        
         ax.set_xlabel("phi [degrees]")
         ax.set_ylabel(f"radiation [$10^{{{int(scale)}}}$ arb]")
         ax.set_title(
             f"time = {evalTime:.4f} ms, "
-            f"TPF: {self.bestFits[float(evalTime)]['powerPerBin']['total']['toroidal_peaking_factor']:.2f}"
+            f"TPF: {rad_distribution['toroidal_peaking_factor']:.2f}"
         )
 
     def _channel_numbers(self, boloName: str) -> np.ndarray:
