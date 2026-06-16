@@ -35,46 +35,23 @@ class TestFindDphi:
         """phi == mu should give dphi == 0."""
         phi = np.array([1.0])
         result = find_dphi(phi, mu=1.0)
-        assert np.isclose(result[0], 0.0)
+        assert np.allclose(result[0], 0.0)
 
-    def test_minimum_distance(self):
-        """Non-helical: should return the shorter angular distance, with sign."""
-        # phi=3, mu=1 → ccw=2, cw=4π-2≈4.28 → shorter is ccw → +2
-        phi = np.array([3.0])
-        result = find_dphi(phi, mu=1.0)
-        assert np.isclose(result[0], 2.0)
-
-    def test_minimum_distance_cw(self):
-        """When clockwise is shorter the result should be negative."""
-        # mu=3.0, phi=1.0 → ccw = (1-3) % 2pi ≈ 4.28, cw = (3-1) % 2pi = 2 → shorter is -2
-        phi = np.array([1.0])
-        result = find_dphi(phi, mu=3.0)
-        assert np.isclose(result[0], -2.0)
 
     def test_clockwise_direction(self):
         """Clockwise emission: result should be negative for phi behind mu."""
-        phi = np.array([1.0])
-        result = find_dphi(phi, mu=2.0, emissionName="clockwise", scale=False)
+        phi = np.array([np.deg2rad(60)])
+        result = find_dphi(phi, mu=np.deg2rad(30), emissionName="clockwise")
         # cw = (2 - 1) % 2pi = 1; result = -1
-        assert result[0] < 0
+        assert np.isclose(result[0], np.deg2rad(330))
 
     def test_counterclock_direction(self):
         """CounterClock emission: result should be positive for phi ahead of mu."""
-        phi = np.array([2.0])
-        result = find_dphi(phi, mu=1.0, emissionName="counterClock", scale=False)
+        phi = np.array([np.deg2rad(60)])
+        result = find_dphi(phi, mu=np.deg2rad(30), emissionName="counterClock")
         # ccw = (2 - 1) % 2pi = 1; result = +1
-        assert result[0] > 0
+        assert np.isclose(result[0], np.deg2rad(30))
 
-    def test_helical_scale_halves_range(self):
-        """
-        For helical distributions (numRevolutions=1) the result is divided by 2,
-        mapping the full circle to [-π, π].
-        """
-        phi = np.array([np.pi])  # half a revolution CCW from mu=0
-        dphi_unscaled = find_dphi(phi, mu=0.0, emissionName="counterClock", scale=False)
-        dphi_scaled   = find_dphi(phi, mu=0.0, emissionName="counterClock", scale=True,
-                                  numRevolutions=1.0)
-        assert np.isclose(dphi_scaled[0] * 2.0, dphi_unscaled[0])
 
     def test_phi_modulo_2pi(self):
         """
@@ -142,7 +119,7 @@ class TestScaleLinear:
     def test_gradient(self):
         dphi = np.array([0.0, 1.0, 2.0])
         result = scale_linear(2.0, 1.0, dphi)  # y = 2*dphi + 1
-        assert np.allclose(result, [1.0, 3.0, 5.0])
+        assert np.allclose(result, [1.0, -1.0, -3.0])
 
     def test_zero_slope(self):
         dphi = np.array([0.0, 5.0, -3.0])

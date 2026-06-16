@@ -6,10 +6,12 @@ Note: All fitting is done centered around zero, dphi = phi - mu, where
 mu is the injection location
 
 Written by JLH Aug. 2025
+
+TODO: Account for rev1, rev2, etc. for the helical distributions. The dphi
 """
 
 import logging
-
+import re
 import numpy as np
 
 from main.Util import convert_arrays_to_list
@@ -29,9 +31,17 @@ def scale_exp(A: float, B: float, dphi: np.ndarray) -> np.ndarray:
     return A * _exp(dphi, B)
 
 
-def scale_linear(A: float, B: float, dphi: np.ndarray) -> np.ndarray:
-    """Linear scaling, y = A * dphi + B"""
-    return A * dphi + B
+def scale_linear(
+    A: float,
+    B: float,
+    dphi: np.ndarray,
+) -> np.ndarray:
+    """
+    Triangular profile centered at mu.
+
+    Peak = B at dphi = 0.
+    """
+    return B - np.abs(A) * dphi
 
 
 def scale_constant(A: float, dphi: np.ndarray) -> np.ndarray:
@@ -58,7 +68,6 @@ def scale_wrapper(
     scale_def: str | None = None,
     emissionName: str | None = None,
     dphi: np.ndarray | None = None,
-    numRevolutions: float = 1.0,
 ):
     """
     Wrapper for the scale function; returns a scaling factor array based on
@@ -79,7 +88,7 @@ def scale_wrapper(
     # --- Find dphi
     if dphi is None:
         dphi = find_dphi(
-            phi, mu, emissionName=str(emissionName), numRevolutions=numRevolutions
+            phi, mu, emissionName=str(emissionName), 
         )
 
     if scale_def == "exponential":
@@ -98,17 +107,27 @@ def find_dphi(
     phi: np.ndarray,
     mu: float = 0.0,
     emissionName: str = "",
-    scale: bool = True,
-    numRevolutions: float = 1.0,
 ) -> np.ndarray:
     """
     Finds the change in toroidal angle between phi and mu.
-    Example: phi = 220, mu = 100, dphi = 120 or 240 depending on the emssionName input.
 
+    Always returns the minimum distance for non-Helical distributions
 
-    For helical distributions the result is also scaled by 0.5 (or
-    1 / (2 * numRevolutions)) so that the range maps to [-pi, pi].
+    Examples
+    --------
+        phi = 220, mu = 100
+        dphi = 120 for counterClock and non-Helical distributions
+        dphi = 240 for clockwise Helical distributions
 
+        phi = -370, mu = 30
+        dphi = 40 + 360 = 400 for counterClock Helical and non-Helical distributions
+        dphi = 320 + 360 = 680 for clockwise Helical distributions
+
+        phi = 275, mu = 260
+        dphi = 345 for counterClock Helical
+        dphi = 15 for clockwise Helical and non-Helical distributions
+
+        
     Parameters
     ----------
     phi           : Toroidal locations of the bolometers (radians)
@@ -125,40 +144,50 @@ def find_dphi(
 
     if emissionName is None:
         logger.warning(
-            "Emission name in Util_emis3D.find_dphi is None. This should not happen..."
+            "Emission name in Util_emis3D.find_dphi is None."
         )
-        return
+        return None
 
-    two_pi = 2 * np.pi
+    phi = np.asarray(phi, dtype=float)
 
-    # --- Find if we need to add 2 pi to the end result
-    phi_ = np.atleast_1d(phi)
-    add_2pi = phi_ > two_pi
+    two_pi = 2.0 * np.pi
 
-    phi = phi % two_pi
-    mu = mu % two_pi
+    # Number of full revolutions represented by phi
+    n_wraps = np.floor(np.abs(phi) / two_pi).astype(int)
 
-    cw = np.atleast_1d((mu - phi) % two_pi)  # clockwise distance
-    ccw = np.atleast_1d((phi - mu) % two_pi)  # counter-clockwise distance
+    # exact multiples of 360 should not count the final wrap
+    n_wraps = np.where(
+        (np.abs(phi) > 0) & (np.mod(np.abs(phi), two_pi) == 0),
+        n_wraps - 1,
+        n_wraps,
+    )
 
-    # --- Correct for values that are greater than 2pi
-    ccw[add_2pi] += two_pi
-    cw[add_2pi] += two_pi
+    wraps = n_wraps * two_pi
 
-    # --- Helical distributions go a full revolution around the machine. Example:
-    # counter-clock goes from the injection location back to the injection location
-    # So we need to scale phi down to +/- pi for the fit, and scale it back up after
-    # the fit
-    #
-    # We also need to account for the total number of revolutions the helical distribution
-    # makes around the machine.
+    phi_mod = phi % two_pi
+    mu_mod = mu % two_pi
+
+    # Positive directional distances
+    ccw = (phi_mod - mu_mod) % two_pi
+    cw = (mu_mod - phi_mod) % two_pi
+
+    # Add back complete revolutions
+    ccw += wraps
+    cw += wraps
+
+    # --- Account for 2nd or more revolutions around the tokamak
+    rev_match = re.search(r"_rev(\d+)", emissionName)
+    n_rev = int(rev_match.group(1)) if rev_match else 0
+    rev_offset = n_rev * two_pi
+        
     if "clockwise" in emissionName:
-        return -cw / (2.0 * numRevolutions) if scale else -cw
-    elif "counterClock" in emissionName:
-        return ccw / (2.0 * numRevolutions) if scale else ccw
+        return cw + rev_offset
 
-    # --- For non-helical distributions, return the shorter angular distance
-    return np.where(ccw <= cw, ccw, -cw)
+    if "counterClock" in emissionName:
+        return ccw + rev_offset
+
+    return np.minimum(ccw, cw)
+
 
 def loc_tag(injectionLocation) -> str:
     """Canonical tag for LMFIT parameter names ('a_240', 'b_ ... _ 240', etc.)
@@ -231,7 +260,6 @@ def residual(
                 mu=mu,
                 scale_def=scale_def,
                 emissionName=emissionName,
-                numRevolutions=numRevolutions,
             )
 
             synth_ = np.array(synthetic_dict[emissionName]["data"][ii])

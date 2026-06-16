@@ -929,6 +929,9 @@ class Tokamak(object):
         this vectorized format should be faster than storing them in a different manner.
         """
 
+        if numTransists > 1:
+            raise ValueError(f"ERROR! Code currently does not support more than 1 toroidal transit of the field lines!")
+
         startPhideg = f"{int(np.rad2deg(startPhi))}"
         # --- Initialize the arrays
         if not hasattr(self, "fieldLines"):
