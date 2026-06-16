@@ -332,7 +332,21 @@ def signal_error(
         return error_inverse(signal, max_signal, scale_factor)
     elif type_ == "INVERSE SQUARE":
         return error_inv_sqrt(signal, max_signal, scale_factor)
+    elif type_ == 'CONSTANT':
+        return error_constant(signal, max_signal)
 
+
+def error_constant(
+        signal: np.ndarray,
+        max_signal: float,
+        _floor: float = 1.0e-12,
+        fraction: float =  0.1 # 10%
+) -> np.ndarray:
+    """Returns fraction * max_signal for each signal"""
+    signal = np.asarray(signal)
+    signal = np.clip(signal, _floor, None)
+    
+    return fraction * max_signal / signal
 
 def error_exponential(
     signal: np.ndarray,
