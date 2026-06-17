@@ -56,6 +56,7 @@ def scale_wrapper(
     scale_def: str | None = None,
     emissionName: str | None = None,
     dphi: np.ndarray | None = None,
+    bolo_phi_locs: np.ndarray | None = None,
 ):
     """
     Wrapper for the scale function; returns a scaling factor array based on
@@ -71,6 +72,7 @@ def scale_wrapper(
     emissionName  : Name of the emission distribution (e.g. 'clockwise')
     dphi          : Pre-computed dphi; calculated from phi/mu if None
     numRevolutions: Number of toroidal revolutions for helical distributions
+    bolo_phi_locs : Toroidal locations of the bolometers (radians)
     """
 
     if phi is None and dphi is None:
@@ -236,7 +238,7 @@ def helical_endpoint_penalty(
     where ``dphi_end = 2*pi * numTransists`` is the winding distance back to the
     injection toroidal angle. 
 
-    ``(data - model) / error`` residuals that LMFIT already minimises::
+    ``(data - model) / error`` residuals that LMFIT already minimizes::
 
         weight * (P_end_cw - P_end_ccw) / (P_peak + eps)
 
@@ -373,6 +375,15 @@ def residual(
     temp_ = {}  # accumulated model signal per bolometer group
     data = {}  # per-emission scaled synthetic (returned when residual=False)
 
+    # --- Find the bolometer locations
+    bolo_phis = []
+    for emissionName in synthetic_dict["emissionNames"]:
+        sF = synthetic_dict[emissionName]["scaleFactor"]
+        sF_flat = [item for sublist in sF for item in sublist]
+        bolo_phis.extend(sF_flat)
+    # Remove duplicates
+    bolo_phis = np.asarray(list(set(bolo_phis)))
+
     for emissionName in synthetic_dict["emissionNames"]:
 
         data[emissionName] = {}
@@ -400,6 +411,7 @@ def residual(
                 mu=mu,
                 scale_def=scale_def,
                 emissionName=emissionName,
+                bolo_phi_locs=bolo_phis,
             )
 
             synth_ = np.array(synthetic_dict[emissionName]["data"][ii])
@@ -428,7 +440,7 @@ def residual(
             bad_indices = np.where(data_ <= 0)[0]
             temp_[ii][bad_indices] = data_[bad_indices]
 
-            # LMFIT minimises the sum of squares, so we return the raw residual
+            # LMFIT minimizes the sum of squares, so we return the raw residual
             numerator = data_ - temp_[ii]
             res.extend(convert_arrays_to_list(numerator / data_error))
 
@@ -450,7 +462,7 @@ def residual(
 
 
 def runParallel(job):
-    """Thin wrapper around residual minimisation for use with ProcessPoolExecutor."""
+    """Thin wrapper around residual minimization for use with ProcessPoolExecutor."""
     boloNames = None
     res_ = True
     fit_index, pars, data_dict, synth_dict, scale_def, helical_endpoint_weight = job

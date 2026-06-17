@@ -102,7 +102,7 @@ from main.radDist import Helical, ElongatedRing, HelicalRing
 
 # --- Fit weight assigned to dead / zero-signal channels so the minmizer ignores
 # them. 
-DEAD_CHANNEL_ERROR = 1.0e4
+DEAD_CHANNEL_ERROR = 1.0e8
 
 # --- Plot styling
 PLOT_COLORS = ['green', 'orangered', 'blue', 'cyan', 'magenta']
@@ -165,6 +165,7 @@ class Emis3D:
         self._load_bolometer_data()
         self._create_master_channel_order()
         self._load_radDists()
+        self._prune_channel_order_to_radDists()
 
     def _perform_fits(self, evalTime: float, crossCalib: bool = False) -> None:
         """
@@ -189,6 +190,7 @@ class Emis3D:
         logger.info(f"→ Done with fit post-processing step 1 out of 2 in {time.time() - t_start:.2f} seconds")
         t_start = time.time()
 
+        self._post_process_bolo_locations(evalTime=evalTime)
         self._post_process_calculations(evalTime=evalTime)
         logger.info(f"→ Done with fit post-processing step 2 out of 2 in {time.time() - t_start:.2f} seconds")
 
@@ -349,6 +351,65 @@ class Emis3D:
                 list(self.data["observed"][bolo]["channelOrder"])
             )
 
+    def _prune_channel_order_to_radDists(self) -> None:
+        """
+        Delete master-order channels that are absent from the radDist synthetic
+        data, so nothing is passed to the minimizer for them.
+        """
+
+        if not hasattr(self, "data") or "synthetic" not in self.data:
+            return
+
+        # --- Gather every loaded radDist
+        radDists = []
+        synth = self.data["synthetic"]
+        for loc in synth.get("locDependent", {}):
+            for number_ in synth["locDependent"][loc]:
+                radDists.append(synth["locDependent"][loc][number_])
+        for number_ in synth.get("locIndependent", {}):
+            radDists.append(synth["locIndependent"][number_])
+
+        if not radDists:
+            return
+
+        # --- Channels available in EVERY radDist (intersection)
+        available = None
+        for radD in radDists:
+            if not getattr(radD, "_load_ok", True) or not hasattr(radD, "data_maps"):
+                continue
+            radD_avail = None
+            for emissionName in radD.info["emissionNames"]:
+                keys = set(radD.data_maps[emissionName]["data"].keys())
+                radD_avail = keys if radD_avail is None else radD_avail & keys
+            if radD_avail is None:
+                continue
+            available = radD_avail if available is None else available & radD_avail
+
+        if available is None:
+            return
+
+        # --- Prune the master order, dropping emptied bolometers and keeping
+        # bolometer_order parallel to channel_list.
+        dropped = []
+        new_channel_list = []
+        new_bolometer_order = []
+        for ii, bolo_chans in enumerate(self.channel_order["channel_list"]):
+            kept = [ch for ch in bolo_chans if ch in available]
+            dropped.extend([ch for ch in bolo_chans if ch not in available])
+            if kept:
+                new_channel_list.append(kept)
+                new_bolometer_order.append(self.channel_order["bolometer_order"][ii])
+
+        self.channel_order["channel_list"] = new_channel_list
+        self.channel_order["bolometer_order"] = new_bolometer_order
+
+        if dropped:
+            logger.warning(
+                "Dropped %d channel(s) absent from the radDist synthetic data; "
+                "they will not be passed to the minimizer: %s",
+                len(dropped),
+                ", ".join(str(ch) for ch in dropped),
+            )
 
     # ------------------------------------------------------------------
     # Fit preparation
@@ -389,7 +450,7 @@ class Emis3D:
 
     def _prepare_data_for_fit(self, evalTime: float) -> None:
         """
-        Average and organise observed data for the minimisation fit.
+        Average and organise observed data for the minimization fit.
 
         Creates
         -------
@@ -445,7 +506,6 @@ class Emis3D:
                 temp.append(val)
 
                 # --- Large error for zero signal, use definition otherwise
-
                 if val > 1.0:
                     err_frac = 0.05
                     if self.info is not None:
@@ -472,7 +532,7 @@ class Emis3D:
     def _prepare_synthetic_for_fits(
         self, evalTime: float, crossCalib: bool = False
     ) -> None:
-        """Prepare and parameterise every radDist for the minimisation."""
+        """Prepare and parameterise every radDist for the minimization."""
 
         print_minor_error = True
 
@@ -847,10 +907,11 @@ class Emis3D:
                 )
 
             # --- Loop over the bolometer and channels to build the lists
-            for bolo_ in self.data["observed"]:
+            for ii, bolo_ in enumerate(self.channel_order['bolometer_order']):
                 self.bestFits[evalTime]["synthData"][emissionName][bolo_] = [
-                    temp_dict[ch] for ch in self.data["observed"][bolo_]["channelOrder"]
+                    temp_dict[ch] for ch in self.channel_order['channel_list'][ii]
                 ]
+
 
         # --- Grab the radDist info and store it
         locdependence = self.fits[evalTime][bestFitID]["info"]["radDists"][
@@ -875,6 +936,44 @@ class Emis3D:
             evalTime=evalTime,
             bestFit=True,
         )
+
+    def _post_process_bolo_locations(self, evalTime: float) -> None:
+        """Extracts each bolometer phi location from the radDist, stores it under self.info['bolometer_phis']"""
+
+        # --- Only run if self._post_process_fit_arrangement() has been run
+        if not hasattr(self, "bestFits"):
+            logger.info(
+                "Please run self._post_process_fit_arrangement() before "
+                "self._post_process_calculations()"
+            )
+            return
+
+        # --- Only run if the radDist has been created
+        if not 'radDist' in self.bestFits[evalTime]:
+            logger.info(
+                "Please run self._post_process_fit_arrangement() before "
+                "self._post_process_calculations()"
+            )
+            return
+
+        # --- Extract bolometer phi locations
+        bolo_phi = []
+        chan_list = [chan for sublist in self.channel_order['channel_list'] for chan in sublist]
+        for bolo_ in self.bestFits[evalTime]['radDist'].tokamak.bolometers:
+            # First check to see if the name is in the master channel order
+            bolo_name = bolo_.info['NAME']
+            if bolo_name in chan_list:
+                bolo_phi.append(bolo_.info['CAMERA_POSITION_R_Z_PHI'][2])
+
+        if self.info is None:
+            self.info = {}
+
+        # Remove duplications
+        bolo_phi_unique = list(set(bolo_phi))
+
+        # Convert to radians
+        bolo_phi_unique = np.deg2rad(np.array(bolo_phi_unique))
+        self.bestFits[evalTime]['bolometer_phi_locations'] = bolo_phi_unique
 
     def _post_process_calculations(self, evalTime: float) -> None:
         """
@@ -946,6 +1045,7 @@ class Emis3D:
                 mu=mu,
                 scale_def=scale_def,
                 emissionName=emissionName,
+                bolo_phi_locs=self.bestFits[evalTime]['bolometer_phi_locations']
             )
 
             # --- Now calculate the radiation around the vessel due to the radDist
@@ -961,7 +1061,6 @@ class Emis3D:
         tp = rad_distribution['total_power']
         tpf = np.max(tp) / (simpson(tp, x = rad_distribution['phi']) / (2.0 * np.pi))
         rad_distribution['toroidal_peaking_factor'] = tpf
-
 
     # ------------------------------------------------------------------
     # Cleanup / persistence
@@ -1037,6 +1136,7 @@ class Emis3D:
     # ------------------------------------------------------------------
     # Plotting
     # ------------------------------------------------------------------
+
     def _plot_bestFit(self, evalTime: float, save: bool = False) -> None:
         """Plots the fit synthetic signal, data, and radDist for the given evalTime."""
         logger.debug(f"→ Plotting the best fit")
@@ -1265,7 +1365,6 @@ class Emis3D:
             numbers.append(int(num_) if num_ is not None else jj + 1)
 
         return np.array(numbers)
-
 
     # ------------------------------------------------------------------
     # Placeholder / future work

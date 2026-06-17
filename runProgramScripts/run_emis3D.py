@@ -53,11 +53,11 @@ if __name__ == "__main__":
 
     # --- Update these parameters:
     evalTimes = [
-        50.949,
+        #50.949,
         #50.953,
         #50.95,
         #50.955,
-        #50.9556,
+        50.9556,
         #50.9569,
         #50.9627,
     ]
@@ -120,6 +120,7 @@ if __name__ == "__main__":
         # --- Preform post-processing
         start_time = time.time()
         t._post_process_fit_arrangement(evalTime=evalTime)
+        t._post_process_bolo_locations(evalTime=evalTime)
         t._post_process_calculations(evalTime=evalTime)
         print(f"→ Done with postprocessing in {time.time() - start_time:.2f} seconds")
         start_time = time.time()

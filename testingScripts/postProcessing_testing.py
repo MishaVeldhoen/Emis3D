@@ -17,7 +17,7 @@ from scipy.integrate import simpson
 
 # NOTE: Program assumes you already have a fit done, and loads it
 
-evalTime = 50.953
+evalTime = 50.9556
 tokamakName = "JET"
 runConfigName = "95709/95709_runConfig.yaml"
 verbose = True
@@ -29,7 +29,7 @@ t = Emis3D(
     initialize=True,
 )
 
-t._load_bestFits(path="/Users/plh/Documents/git/Emis3D/inputs/JET/runs/95709/95709_bestFits_50.9530.dill")
+t._load_bestFits(path="/Users/plh/Documents/git/Emis3D/inputs/JET/runs/95709/95709_bestFits_50.9556.dill")
 
 '''
 # --- Calculates the radiation amplitude distribution from the best fit
@@ -109,10 +109,10 @@ if t.info is not None:
             a=a,
             b=b,
             phi=rD_phi,
-            dphi=dphi,
             mu=mu,
             scale_def=scale_def,
             emissionName=emissionName,
+            dphi=dphi,
         )
 
         # --- Now calculate the radiation around the vessel due to the radDist
