@@ -2,7 +2,7 @@
 tests/test_util_emis3d.py
 =========================
 Unit tests for main/Util_emis3D.py
-Covers find_dphi, all scale_* functions, von_mises_amplitude, error models,
+Covers find_dphi, all scale_* functions, error models,
 and the scale_wrapper dispatcher.
 No cherab or raysect required.
 """

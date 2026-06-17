@@ -17,7 +17,7 @@ from scipy.integrate import simpson
 
 # NOTE: Program assumes you already have a fit done, and loads it
 
-evalTime = 50.9556
+evalTime = 50.953
 tokamakName = "JET"
 runConfigName = "95709/95709_runConfig.yaml"
 verbose = True
@@ -29,7 +29,7 @@ t = Emis3D(
     initialize=True,
 )
 
-t._load_bestFits(path="/Users/plh/Documents/git/Emis3D/inputs/JET/runs/95709/95709_bestFits_50.956.dill")
+t._load_bestFits(path="/Users/plh/Documents/git/Emis3D/inputs/JET/runs/95709/95709_bestFits_50.9530.dill")
 
 '''
 # --- Calculates the radiation amplitude distribution from the best fit
@@ -93,7 +93,7 @@ if t.info is not None:
         else:
             # Checker to make sure that phi arrays match when doing helical distributions
             # (or more than one injection location)
-            if rD_phi != rad_distribution['phi']:
+            if not np.array_equal(rD_phi, rad_distribution['phi']):
                 raise ValueError("Error! PHI arrays do not match in _post_process_calculations")
                 
         # dphi already accounts for _rev1, _rev2, etc. for helical distributions
@@ -139,6 +139,7 @@ if t.info is not None:
             ax.plot(rad_distribution[emissionName]["phi"] , 
                     rad_distribution[emissionName]["total_power"],
                     label = emissionName)
+        ax.plot(rad_distribution['phi'], rad_distribution['total_power'], linewidth = 2.0, color = 'black', label = 'Total Emission')
         ax.legend()
         ax.set_xlabel('phi [rad]')
         ax.set_ylabel('multiplication factor')

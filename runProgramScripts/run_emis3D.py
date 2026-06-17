@@ -35,10 +35,17 @@ def runParallel_with_global(job):
     """
     Wrapper that uses the global data_dict
     """
-    fit_index, pars, synth_dict, scale_def = job
+    fit_index, pars, synth_dict, scale_def, helical_endpoint_weight = job
 
     return Util_emis3D.runParallel(
-        (fit_index, pars, _global_data_dict, synth_dict, scale_def)
+        (
+            fit_index,
+            pars,
+            _global_data_dict,
+            synth_dict,
+            scale_def,
+            helical_endpoint_weight
+        )
     )
 
 
@@ -46,11 +53,11 @@ if __name__ == "__main__":
 
     # --- Update these parameters:
     evalTimes = [
-        #50.949,
+        50.949,
         #50.953,
         #50.95,
         #50.955,
-        50.9556,
+        #50.9556,
         #50.9569,
         #50.9627,
     ]
@@ -66,13 +73,16 @@ if __name__ == "__main__":
 
         jobs = []
         data_dict = t.fitData[evalTime]
-        scale_def = "von_mises"
-        max_workers = 1  # Default value if non are given
+        scale_def = "linear" # Default value if none are given
+        max_workers = 1  # Default value if none are given
+        helical_endpoint_weight = 1.0  # Default: endpoint constraint active
         if t.info is not None:
             if "scale_def" in t.info:
                 scale_def = t.info["scale_def"]
             if "numProcessorsFitting" in t.info:
                 max_workers = t.info["numProcessorsFitting"]
+            if "helical_endpoint_weight" in t.info:
+                helical_endpoint_weight = t.info["helical_endpoint_weight"]
 
         for ii in t.fits[evalTime]:
             if isinstance(ii, int):
@@ -82,6 +92,7 @@ if __name__ == "__main__":
                         t.fits[evalTime][ii]["parameters"],
                         t.fits[evalTime][ii]["synthetic_dict"],
                         scale_def,
+                        helical_endpoint_weight,
                     )
                 )
         results = {}

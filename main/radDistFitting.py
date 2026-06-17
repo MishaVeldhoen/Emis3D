@@ -3,12 +3,7 @@
 Helper class used to set up a loaded radDist for fitting, maps signals, loads radDist,
 creates the parameters, etc.
 
-NOTE: The minimum values for the fitting are hard coded in self.create_parameters
-This was done so the von mises distribution decays to zero for the helical distribution at +/- pi
-which corresponds to +/- 720 degrees, since phi is scaled down during fitting.
-
 Written by JLH Aug. 2025
-
 """
 
 import numpy as np

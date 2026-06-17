@@ -563,6 +563,19 @@ class Emis3D:
                 "data_error": radDist_.fitSynthetic[emissionName]["data_error"],
             }
 
+            # --- Toroidal radiated-power profile, used by the helical endpoint
+            # continuity constraint (Util_emis3D.helical_endpoint_penalty).
+            # Stored under 'phi_array'/'P_pol' on the radDist; absent for older
+            # saved radDists, in which case the constraint quietly turns off.
+            tor_power = radDist_.data.get("toroidalRadiatedPower", {})
+            if emissionName in tor_power:
+                synthetic_dict[emissionName]["phi_array"] = tor_power[emissionName].get(
+                    "phi_array"
+                )
+                synthetic_dict[emissionName]["P_pol"] = tor_power[emissionName].get(
+                    "P_pol"
+                )
+
         return synthetic_dict
 
     def _prepare_fits(self, evalTime: float, crossCalib: bool = False) -> None:
@@ -648,6 +661,10 @@ class Emis3D:
             # --- Data used for fitting
             data_dict = self.fitData[evalTime]
 
+            # --- Soft-constraint weight tying helical endpoints together.
+            # Active (1.0) by default; set to 0.0 in the run config to disable.
+            helical_endpoint_weight = self.info.get("helical_endpoint_weight", 1.0)
+
             for ii in self.fits[evalTime]:
 
                 if not isinstance(ii, int):
@@ -677,6 +694,7 @@ class Emis3D:
                             self.info["scale_def"],
                             boloNames,
                             True,  # residual = True
+                            helical_endpoint_weight,
                         ),
                         method="leastsq",
                     )
@@ -906,8 +924,10 @@ class Emis3D:
                 rad_distribution['total_power'] = np.zeros(rD_phi.shape)
             else:
                 # Checker to make sure that phi arrays match when doing helical distributions
-                # (or more than one injection location)
-                if rD_phi != rad_distribution['phi']:
+                # (or more than one injection location). Use array_equal because
+                # 'rD_phi != stored' is an element-wise array, which is ambiguous
+                # in a boolean context and would raise a ValueError.
+                if not np.array_equal(rD_phi, rad_distribution['phi']):
                     raise ValueError("Error! PHI arrays do not match in _post_process_calculations")
 
             # dphi already accounts for _rev1, _rev2, etc. for helical distributions
@@ -941,7 +961,6 @@ class Emis3D:
         tp = rad_distribution['total_power']
         tpf = np.max(tp) / (simpson(tp, x = rad_distribution['phi']) / (2.0 * np.pi))
         rad_distribution['toroidal_peaking_factor'] = tpf
-
 
 
     # ------------------------------------------------------------------
@@ -1214,16 +1233,7 @@ class Emis3D:
                 'Peak\nradiation',
                 ha = 'center', va = 'bottom', size = 10
                 )
-        if self.info is not None:
-            ax.axvline(np.deg2rad(self.info['injectionLocation']),
-                    np.floor(np.nanmin(y_scaled)),
-                    np.ceil(np.nanmax(y_scaled)),
-                    linestyle = 'dashed', color = 'tab:blue')
-            ax.text(np.deg2rad(self.info['injectionLocation']),
-                    np.floor(np.nanmin(y_scaled)) * 1.1,
-                    'Injection\nlocation',
-                    ha = 'center', va = 'bottom', size = 10
-                    )
+
         
         ax.set_xlabel("phi [degrees]")
         ax.set_ylabel(f"radiation [$10^{{{int(scale)}}}$ arb]")

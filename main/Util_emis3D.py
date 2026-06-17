@@ -39,14 +39,13 @@ def scale_linear(
     """
     Triangular profile centered at mu.
 
-    Peak = A at dphi = 0.
+    Peak = A at dphi = 0. Should not be negative. 
     """
-    return A - np.abs(B) * dphi
+    return np.abs(A - np.abs(B) * dphi)
 
 
 def scale_constant(A: float, dphi: np.ndarray) -> np.ndarray:
     return A * np.ones(dphi.shape[0])
-
 
 
 def scale_wrapper(
@@ -68,17 +67,23 @@ def scale_wrapper(
     b             : Shape parameter used by most scaling functions
     phi           : Toroidal locations of the bolometers (radians)
     mu            : Injection location (radians)
-    scale_def     : One of 'exponential', 'linear', 'constant', 'von_mises'
+    scale_def     : One of 'exponential', 'linear', 'constant'
     emissionName  : Name of the emission distribution (e.g. 'clockwise')
     dphi          : Pre-computed dphi; calculated from phi/mu if None
     numRevolutions: Number of toroidal revolutions for helical distributions
     """
 
+    if phi is None and dphi is None:
+        raise ValueError("Phi or dphi array must be populated when calling scale_wrapper!")
+    
     # --- Find dphi
-    if dphi is None:
+    if dphi is None and phi is not None:
         dphi = find_dphi(
             phi, mu, emissionName=str(emissionName), 
         )
+
+    if dphi is None:
+        return
 
     if scale_def == "exponential":
         return scale_exp(a, b, dphi)
@@ -182,6 +187,155 @@ def loc_tag(injectionLocation) -> str:
     return str(int(round(float(injectionLocation))))
 
 
+def _emission_pairs(emissionNames) -> list:
+    """
+    Pair the clockwise / counterClock helical emission directions that share the
+    same revolution suffix.
+
+    Examples
+    --------
+        ['clockwise_rev0', 'counterClock_rev0'] -> [('clockwise_rev0',
+                                                     'counterClock_rev0')]
+
+    Returns
+    -------
+    list of (clockwise_name, counterClock_name) tuples.
+    """
+    cw, ccw = {}, {}
+    for name in emissionNames:
+        # 'clockwise' is not a substring of 'counterClock', so the order of
+        # these checks does not cause a mis-classification.
+        if "clockwise" in name:
+            cw[name.replace("clockwise", "")] = name
+        elif "counterClock" in name:
+            ccw[name.replace("counterClock", "")] = name
+
+    return [(cw[s], ccw[s]) for s in cw if s in ccw]
+
+
+def helical_endpoint_penalty(
+    pars,
+    synthetic_dict,
+    scale_def: str | None = None,
+    weight: float = 0.0,
+) -> list:
+    """
+    Soft constraint tying paired clockwise / counterClock helical distributions
+    together at the helix *endpoint*.
+
+    The peak (dphi = 0) of the two directions is already tied together because
+    both share the universal amplitude ``a_<tag>``. What is *not* tied is the
+    endpoint, i.e. the point reached after one full toroidal transit, which sits
+    back at the injection toroidal angle (phi = injectionLocation mod 2*pi).
+    This function adds that missing condition.
+
+    For a direction d the endpoint radiated power is::
+
+        P_end_d = scale_d(dphi_end) * P_pol_d(phi = mu mod 2*pi) * scaleSynth
+
+    where ``dphi_end = 2*pi * numTransists`` is the winding distance back to the
+    injection toroidal angle. 
+
+    ``(data - model) / error`` residuals that LMFIT already minimises::
+
+        weight * (P_end_cw - P_end_ccw) / (P_peak + eps)
+
+        P_peak = a * scaleSynth * 0.5*(P_pol_cw(mu) + P_pol_ccw(mu))
+
+    Normalising by the peak keeps it unitless. 
+
+    Returns an empty list (no constraint) when:
+      * ``weight == 0``,
+      * no clockwise/counterClock pair is present (non-helical distribution),
+      * the radiated-power profile (``P_pol`` / ``phi_array``) was not threaded
+        into ``synthetic_dict`` (e.g. older saved radDists), or
+      * the shared amplitude ``a_<tag>`` is absent (cross-calibration fits).
+
+    Notes
+    -----
+    The radiated-power profile is stored on the radDist under
+    ``data['toroidalRadiatedPower'][emissionName]`` with keys ``'phi_array'``
+    and ``'P_pol'`` (NOT ``'phi'``); ``_build_synthetic_dict`` copies those into
+    ``synthetic_dict[emissionName]``.
+    """
+
+    if not weight:
+        return []
+
+    pairs = _emission_pairs(synthetic_dict.get("emissionNames", []))
+    if not pairs:
+        return []
+
+    params = pars.valuesdict()
+    tag = loc_tag(synthetic_dict["injectionLocation"])
+
+    a_name = f"a_{tag}"
+    if a_name not in params:
+        # cross-calibration mode has no shared amplitude; nothing to tie together
+        return []
+    a = params[a_name]
+
+    # Injection / peak location (rad)
+    mu = float(synthetic_dict["injectionLocation_rad"])
+    if "peak_rad_loc" in params:
+        mu = float(params["peak_rad_loc"])
+
+
+    eps = 1.0e-30
+    penalties = []
+
+    for cw_name, ccw_name in pairs:
+        endpoint_power = {}
+        peak_Ppol = {}
+        usable = True
+
+        for name in (cw_name, ccw_name):
+            sub = synthetic_dict.get(name, {})
+            phi_arr = np.asarray(sub.get("phi_array", []), dtype=float)
+            P_pol = np.asarray(sub.get("P_pol", []), dtype=float)
+            if phi_arr.size == 0 or P_pol.size == 0:
+                usable = False
+                break
+
+            b = params.get(f"b_{name}_{tag}", 0.0)
+
+            # Scale evaluated at the endpoint winding distance (NOT at phi = mu,
+            # which would return the dphi = 0 peak).
+            scale_end = scale_wrapper(
+                a,
+                b,
+                phi=phi_arr,
+                mu=mu,
+                scale_def=scale_def,
+                emissionName=name,
+            )
+
+            if scale_end is None:
+                usable = False
+                break
+
+            # P_pol sampled at the injection toroidal location (mod 2*pi)
+            idx = int(np.argmin(np.abs(phi_arr - mu)))
+            scaleSynth = float(sub.get("scaleSynth", 1.0))
+
+            endpoint_power[name] = scale_end[idx] * P_pol[idx] * scaleSynth
+            peak_Ppol[name] = P_pol[idx] * scaleSynth
+
+        if not usable:
+            continue
+
+        p_cw = endpoint_power[cw_name]
+        p_ccw = endpoint_power[ccw_name]
+
+        # Peak power shared reference (dphi = 0 amplitude is 'a'); keeps the
+        # penalty bounded and ->0 when both endpoints have decayed away.
+        p_peak = a * 0.5 * (peak_Ppol[cw_name] + peak_Ppol[ccw_name])
+        penalties.append(weight * (p_cw - p_ccw) / (p_peak + eps))
+
+    return penalties
+
+
+
 def residual(
     pars,
     data_dict,
@@ -189,6 +343,7 @@ def residual(
     scale_def: str | None = None,
     boloNames=None,
     residual: bool = True,
+    helical_endpoint_weight: float = 0.0,
 ):
     """
     Computes the residual (or the scaled synthetic data) for the minimizer.
@@ -198,6 +353,11 @@ def residual(
     When ``residual=False`` returns a dict of scaled synthetic arrays keyed
     by emissionName → bolometer-group index. This is used to make synthetic data
     in Emis3D._post_process_fit_arrangement()
+
+    ``helical_endpoint_weight`` (only used when ``residual=True``) controls the
+    soft constraint that ties paired clockwise / counterClock helical
+    distributions together at the helix endpoint; see
+    :func:`helical_endpoint_penalty`. A weight of 0 disables the constraint.
     """
 
     a = 0.0
@@ -214,14 +374,6 @@ def residual(
     data = {}  # per-emission scaled synthetic (returned when residual=False)
 
     for emissionName in synthetic_dict["emissionNames"]:
-
-        # --- Find the number of revolutions the helical distribution makes
-        numRevolutions = 1.0
-
-        if "clockwise" in emissionName or "counterClock" in emissionName:
-            if "info" in synthetic_dict:
-                if "numTransists" in synthetic_dict["info"]:
-                    numRevolutions = synthetic_dict["info"]["numTransists"]
 
         data[emissionName] = {}
         tag = loc_tag(synthetic_dict['injectionLocation'])
@@ -253,6 +405,9 @@ def residual(
             synth_ = np.array(synthetic_dict[emissionName]["data"][ii])
             # synth_error = np.array(synthetic_dict[emissionName]["data_error"][ii])
 
+            if scale_ is None:
+                raise RuntimeError("Scale_ returned None for some reason!?!")
+                break
             if ii not in temp_:
                 temp_[ii] = np.zeros(len(scale_))
 
@@ -277,6 +432,18 @@ def residual(
             numerator = data_ - temp_[ii]
             res.extend(convert_arrays_to_list(numerator / data_error))
 
+        # --- Soft constraint: tie paired clockwise / counterClock helical
+        # distributions together at the helix endpoint (phi = mu mod 2*pi).
+        # Returns [] for non-helical fits or when weight == 0.
+        res.extend(
+            helical_endpoint_penalty(
+                pars,
+                synthetic_dict,
+                scale_def=scale_def,
+                weight=helical_endpoint_weight,
+            )
+        )
+
         return res
     else:
         return data
@@ -286,7 +453,7 @@ def runParallel(job):
     """Thin wrapper around residual minimisation for use with ProcessPoolExecutor."""
     boloNames = None
     res_ = True
-    fit_index, pars, data_dict, synth_dict, scale_def = job
+    fit_index, pars, data_dict, synth_dict, scale_def, helical_endpoint_weight = job
 
     fit = minimize(
         residual,
@@ -297,6 +464,7 @@ def runParallel(job):
             scale_def,
             boloNames,
             res_,
+            helical_endpoint_weight,
         ),
         method="leastsq",
     )

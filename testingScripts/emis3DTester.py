@@ -26,8 +26,6 @@ The new fitting routine is not working that well.... it seems to drop off too qu
 TODO: TODO: TODO: Increase the number of revolutions for the helical distribtion to 2x in both directions,
 this should help with the fitting and ensure a continous TPF distribution.
 
-NOW: The von-mises fitting does not go to zero fast enough, so the TPF distribution is discontinous
-, put some limitiation of the endpoints of the distribution
 
 Another bug: clockwise rev1 is higher than clockwise rev0!!!
 
