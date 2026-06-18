@@ -746,7 +746,7 @@ class Emis3D:
                         and "bolometer_order" in self.channel_order
                     ):
                         boloNames = self.channel_order["bolometer_order"]
-                    '''
+
                     self.fits[evalTime][ii]["fit"] = minimize(
                         Util_emis3D.residual,
                         pars,
@@ -758,8 +758,6 @@ class Emis3D:
                             True,  # residual = True
                             helical_endpoint_weight,
                         ),
-                        #method="leastsq",
-                        #method = "emcee",
                         method = "differential_evolution",
                     )
                     '''
@@ -790,7 +788,7 @@ class Emis3D:
                         ),
                         method="least_squares",
                     )
-
+                    '''
 
 
                     self.fits[evalTime]["chiSqVec"][ii] = self.fits[evalTime][ii][
@@ -1042,7 +1040,7 @@ class Emis3D:
 
         # Value at the end of each tag in params
         inj_loc_tag = Util_emis3D.loc_tag(self.bestFits[evalTime]["synthetic_dict"]["injectionLocation"])
-
+        mu_grid = None
 
         for emissionName in emissionNames:
             rad_distribution[emissionName] = {}
@@ -1064,7 +1062,10 @@ class Emis3D:
                     raise ValueError("Error! PHI arrays do not match in _post_process_calculations")
 
             # dphi already accounts for _rev1, _rev2, etc. for helical distributions
-            dphi = Util_emis3D.find_dphi(rD_phi, mu, emissionName=emissionName)
+            # Snap mu to the phi grid, so mu is zero at the injection location
+            ang = (rD_phi - mu + np.pi) % (2.0 * np.pi) - np.pi
+            mu_grid = float(rD_phi[int(np.argmin(np.abs(ang)))])
+            dphi = Util_emis3D.find_dphi(rD_phi, mu_grid, emissionName=emissionName)
 
             # Both directions share amplitude 'a'; their individual decay constant
             # 'b' controls how fast each falls off away from the injection location.
@@ -1076,7 +1077,7 @@ class Emis3D:
                 b=b,
                 phi=rD_phi,
                 dphi=dphi,
-                mu=mu,
+                mu=mu_grid,
                 scale_def=scale_def,
                 emissionName=emissionName,
                 bolo_phi_locs=self.bestFits[evalTime]['bolometer_phi_locations']
@@ -1090,8 +1091,15 @@ class Emis3D:
             rad_distribution[emissionName]["total_power"] = np.asarray(rD_power)
             rad_distribution['total_power'] += rD_power
 
+
         rad_distribution['peak_emission'] = mu
         
+        # --- Remove the spot at the injection location, since it is double-counted
+        if mu_grid is not None:
+            loc = np.abs(rad_distribution["phi"] - mu_grid).argmin()
+            rad_distribution['total_power'] = np.delete(rad_distribution['total_power'], loc)
+            rad_distribution['phi'] = np.delete(rad_distribution['phi'], loc)
+
         tp = rad_distribution['total_power']
         tpf = np.max(tp) / (simpson(tp, x = rad_distribution['phi']) / (2.0 * np.pi))
         rad_distribution['toroidal_peaking_factor'] = tpf
