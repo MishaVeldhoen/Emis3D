@@ -567,6 +567,7 @@ class Emis3D:
                         boloNames=boloNames,
                         enable_dphi_scaling=self.info["enable_dphi_scaling"],
                         vary_peak_rad_location=self.info["vary_peak_rad_location"],
+                        scale_def = self.info['scale_def'],
                     )
                     if "ERROR CHANNELS" in radD.info and print_minor_error:
                         print_error(radD)
@@ -582,6 +583,7 @@ class Emis3D:
                     boloNames=boloNames,
                     enable_dphi_scaling=self.info["enable_dphi_scaling"],
                     vary_peak_rad_location=self.info["vary_peak_rad_location"],
+                    scale_def = self.info['scale_def'],
                 )
 
                 if "ERROR CHANNELS" in radD.info and print_minor_error:
@@ -744,7 +746,7 @@ class Emis3D:
                         and "bolometer_order" in self.channel_order
                     ):
                         boloNames = self.channel_order["bolometer_order"]
-
+                    '''
                     self.fits[evalTime][ii]["fit"] = minimize(
                         Util_emis3D.residual,
                         pars,
@@ -756,8 +758,40 @@ class Emis3D:
                             True,  # residual = True
                             helical_endpoint_weight,
                         ),
-                        method="leastsq",
+                        #method="leastsq",
+                        #method = "emcee",
+                        method = "differential_evolution",
                     )
+                    '''
+                    results_global = minimize(
+                        Util_emis3D.residual,
+                        pars,
+                        args=(
+                            data_dict,
+                            synth_dict,
+                            self.info["scale_def"],
+                            boloNames,
+                            True,  # residual = True
+                            helical_endpoint_weight,
+                        ),
+                        method = "differential_evolution",
+                    )
+
+                    self.fits[evalTime][ii]["fit"] = minimize(
+                        Util_emis3D.residual,
+                        results_global.params, # type:ignore
+                        args=(
+                            data_dict,
+                            synth_dict,
+                            self.info["scale_def"],
+                            boloNames,
+                            True,  # residual = True
+                            helical_endpoint_weight,
+                        ),
+                        method="least_squares",
+                    )
+
+
 
                     self.fits[evalTime]["chiSqVec"][ii] = self.fits[evalTime][ii][
                         "fit"

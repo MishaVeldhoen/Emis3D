@@ -167,6 +167,7 @@ class RadDistFitting:
         boloNames: list | None = None,
         enable_dphi_scaling: bool = False,
         vary_peak_rad_location: bool = False,
+        scale_def: str = ""
     ) -> None:
         """
         Creates the LMFIT parameters for the radDist
@@ -180,7 +181,7 @@ class RadDistFitting:
             # --- Create constant multiplication value
             paramName = f"a_{loc_tag(self.info['injectionLocation'])}"
             self.fitSynthetic["params"]["paramName"].append(paramName)
-            params.add(paramName, value=1.0, min=0)
+            params.add(paramName, value=1.0, min=1.0, max = 6.0)
 
         # --- Only create the constant value for each bolometer if preforming a cross-calib
         else:
@@ -192,12 +193,13 @@ class RadDistFitting:
         # --- Create a peak radiation variable if vary_peak_rad_location is True:
         if vary_peak_rad_location:
             default_ = np.deg2rad(int(self.info["injectionLocation"]))
+            default_ = np.deg2rad(225.0)
             paramName = f"peak_rad_loc"
             self.fitSynthetic["params"]["paramName"].append(paramName)
             params.add(
                 paramName,
                 value=default_,  # Start at the injection location
-                min=0,
+                min=0.1,
                 max=2.0 * np.pi,
                 vary=True,
             )
@@ -206,9 +208,13 @@ class RadDistFitting:
         for emissionName in self.info["emissionNames"]:
             paramName = None
             min_ = 0.0
+            max_ = 10.0
             paramName = f"b_{emissionName}_{loc_tag(self.info['injectionLocation'])}"
-            if "clockwise" in emissionName or "counterClock" in emissionName:
-                min_ = 0.0
+
+            if scale_def.upper() == 'LINEAR':
+                min_ = 0.01
+                max_ = 0.4
+
 
             # --- Add it to the params pool
             if (
@@ -218,10 +224,10 @@ class RadDistFitting:
                 self.fitSynthetic["params"]["paramName"].append(paramName)
                 params.add(
                     paramName,
-                    value=2.0,
+                    value=(max_ - min_) / 2.0,
                     vary=enable_dphi_scaling,
                     min=min_,
-                    max=15.0,
+                    max=max_, 
                 )
 
         self.fitSynthetic["params"]["params"] = params
